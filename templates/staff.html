@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Staff – EduSchedule Pro{% endblock %}
+{% block page_title %}Staff Management{% endblock %}
+{% block topbar_actions %}<button class="btn-primary-sm" onclick="openAddModal()"><i class="fas fa-plus me-1"></i>Add Staff</button>{% endblock %}
+{% block content %}
+<div class="search-bar-row"><div class="search-wrap"><i class="fas fa-search"></i><input type="text" id="staffSearch" class="search-input" placeholder="Search staff by name or department…" oninput="filterCards()"/></div><span class="result-count" id="resultCount">{{ staff|length }} staff</span></div>
+<div class="cards-grid" id="staffGrid">
+{% for s in staff %}
+<div class="staff-card" id="sc-{{ s.id }}" data-name="{{ s.name|lower }}" data-dept="{{ s.department|lower }}">
+  <div class="sc-header">
+    <div class="sc-ava">{{ s.name[0] }}</div>
+    <div class="sc-meta"><h4>{{ s.name }}</h4><span class="dept-tag">{{ s.department }}</span></div>
+    <div class="sc-actions">
+      {% if current_user.role == "admin" %}
+      <button class="btn-icon-sm blue" onclick="editStaff({{ s.id }})"><i class="fas fa-edit"></i></button>
+      <button class="btn-icon-sm red" onclick="delStaff({{ s.id }})"><i class="fas fa-trash"></i></button>
+      {% endif %}
+    </div>
+  </div>
+  <div class="sc-stats">
+    <div class="sc-stat"><i class="fas fa-briefcase"></i>{{ s.experience }} yrs</div>
+    <div class="sc-stat"><i class="fas fa-clock"></i>{{ s.allocated_periods }}/{{ s.max_periods_per_week }} periods</div>
+  </div>
+  <div class="wl-bar-wrap">
+    <div class="wl-bar"><div class="wl-fill {% if s.pct>90 %}danger{% elif s.pct>70 %}warn{% else %}ok{% endif %}" style="width:{{ s.pct }}%"></div></div>
+    <span class="wl-pct">{{ s.pct }}%</span>
+  </div>
+  <div class="tag-row">
+    {% for sn in s.subject_names[:3] %}<span class="s-tag">{{ sn }}</span>{% endfor %}
+    {% if s.subject_names|length>3 %}<span class="s-tag more">+{{ s.subject_names|length-3 }}</span>{% endif %}
+    {% if not s.subject_names %}<span class="text-muted small">No subjects</span>{% endif %}
+  </div>
+  <div class="sc-avail">
+    <i class="fas fa-calendar-check text-muted me-1"></i>
+    <span class="small text-muted">{{ s.available_days or 'Mon-Fri' }}</span>
+  </div>
+</div>
+{% else %}<div class="empty-state"><i class="fas fa-users"></i><p>No staff yet. Add your first staff member.</p></div>{% endfor %}
+</div>
+
+<div class="modal fade" id="staffModal" tabindex="-1">
+  <div class="modal-dialog modal-lg"><div class="modal-content cm">
+    <div class="cm-head"><h5 id="staffModalTitle">Add Staff</h5><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+      <input type="hidden" id="staffId"/>
+      <div class="row g-3">
+        <div class="col-md-6"><label class="form-label fw-600">Full Name *</label><input type="text" class="ctrl" id="sName" required/></div>
+        <div class="col-md-6"><label class="form-label fw-600">Department *</label><select class="ctrl" id="sDept"><option>CSE</option><option>ECE</option><option>MECH</option><option>CIVIL</option><option>COMMON</option><option>OTHER</option></select></div>
+        <div class="col-md-4"><label class="form-label fw-600">Experience (yrs)</label><input type="number" class="ctrl" id="sExp" min="0" value="0"/></div>
+        <div class="col-md-4"><label class="form-label fw-600">Max Periods/Week</label><input type="number" class="ctrl" id="sMax" min="1" value="20"/></div>
+        <div class="col-md-4"><label class="form-label fw-600">Email</label><input type="email" class="ctrl" id="sEmail"/></div>
+        <div class="col-12">
+          <label class="form-label fw-600">Available Days</label>
+          <div class="days-picker">
+            {% for d in ['Mon','Tue','Wed','Thu','Fri','Sat'] %}
+            <label class="day-chip {% if d in ['Mon','Tue','Wed','Thu','Fri'] %}active{% endif %}" id="sday-{{ d }}">
+              <input type="checkbox" class="sday-cb" value="{{ d }}" {% if d in ['Mon','Tue','Wed','Thu','Fri'] %}checked{% endif %} onchange="this.closest('.day-chip').classList.toggle('active',this.checked)"/>
+              {{ d }}
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="col-12"><label class="form-label fw-600">Can Teach Subjects</label>
+          <div class="cb-grid">{% for subj in subjects %}<label class="cb-item"><input type="checkbox" class="subj-cb" value="{{ subj.id }}"/><span>{{ subj.subject_name }} <small>({{ subj.department }})</small></span></label>{% endfor %}</div>
+        </div>
+      </div>
+    </div>
+    <div class="cm-foot"><button class="btn-cancel" data-bs-dismiss="modal">Cancel</button><button class="btn-save" onclick="saveStaff()">Save Staff</button></div>
+  </div></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const staffModal=new bootstrap.Modal(document.getElementById('staffModal'));
+function filterCards(){
+  const q=document.getElementById('staffSearch').value.toLowerCase();
+  let n=0;
+  document.querySelectorAll('.staff-card').forEach(c=>{
+    const show=!q||c.dataset.name.includes(q)||c.dataset.dept.includes(q);
+    c.style.display=show?'':'none'; if(show)n++;
+  });
+  document.getElementById('resultCount').textContent=n+' staff';
+}
+function openAddModal(){
+  document.getElementById('staffModalTitle').textContent='Add Staff';
+  document.getElementById('staffId').value='';
+  ['sName','sEmail'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('sDept').value='CSE';
+  document.getElementById('sExp').value=0; document.getElementById('sMax').value=20;
+  document.querySelectorAll('.subj-cb').forEach(c=>c.checked=false);
+  document.querySelectorAll('.sday-cb').forEach(c=>{c.checked=['Mon','Tue','Wed','Thu','Fri'].includes(c.value);c.closest('.day-chip').classList.toggle('active',c.checked);});
+  staffModal.show();
+}
+async function editStaff(id){
+  const s=await fetch('/api/staff/'+id).then(r=>r.json());
+  document.getElementById('staffModalTitle').textContent='Edit Staff';
+  document.getElementById('staffId').value=s.id;
+  document.getElementById('sName').value=s.name; document.getElementById('sDept').value=s.department;
+  document.getElementById('sExp').value=s.experience; document.getElementById('sMax').value=s.max_periods_per_week;
+  document.getElementById('sEmail').value=s.email||'';
+  document.querySelectorAll('.subj-cb').forEach(c=>c.checked=s.subjects.includes(parseInt(c.value)));
+  const avail=(s.available_days||'Mon,Tue,Wed,Thu,Fri').split(',');
+  document.querySelectorAll('.sday-cb').forEach(c=>{c.checked=avail.includes(c.value);c.closest('.day-chip').classList.toggle('active',c.checked);});
+  staffModal.show();
+}
+async function saveStaff(){
+  const id=document.getElementById('staffId').value;
+  const subjects=[...document.querySelectorAll('.subj-cb:checked')].map(c=>parseInt(c.value));
+  const available_days=[...document.querySelectorAll('.sday-cb:checked')].map(c=>c.value);
+  const data={name:document.getElementById('sName').value,department:document.getElementById('sDept').value,
+    experience:document.getElementById('sExp').value,max_periods_per_week:document.getElementById('sMax').value,
+    email:document.getElementById('sEmail').value,subjects,available_days};
+  const r=await fetch(id?'/api/staff/'+id:'/api/staff',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  const d=await r.json();
+  if(d.success){staffModal.hide();location.reload();}
+}
+async function delStaff(id){if(!confirm('Delete staff member?'))return;await fetch('/api/staff/'+id,{method:'DELETE'});location.reload();}
+</script>
+{% endblock %}

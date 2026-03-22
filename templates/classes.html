@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Classes – EduSchedule Pro{% endblock %}
+{% block page_title %}Class Management{% endblock %}
+{% block topbar_actions %}<button class="btn-primary-sm" onclick="openAddModal()"><i class="fas fa-plus me-1"></i>Add Class</button>{% endblock %}
+{% block content %}
+<div class="search-bar-row"><div class="search-wrap"><i class="fas fa-search"></i><input type="text" id="clsSearch" class="search-input" placeholder="Search classes…" oninput="filterClasses()"/></div><span class="result-count" id="clsCount">{{ classes|length }} classes</span></div>
+<div class="cards-grid">
+{% for c in classes %}
+<div class="class-card" id="cc-{{ c.id }}" data-name="{{ c.name|lower }}" data-dept="{{ c.department|lower }}">
+  <div class="cc-header">
+    <div class="cc-icon"><i class="fas fa-door-open"></i></div>
+    <div class="cc-meta"><h4>{{ c.name }}</h4><span class="dept-tag">{{ c.department }}</span></div>
+    <div class="sc-actions">
+      {% if current_user.role == "admin" %}
+      <button class="btn-icon-sm blue" onclick="editClass({{ c.id }})"><i class="fas fa-edit"></i></button>
+      <button class="btn-icon-sm red" onclick="delClass({{ c.id }})"><i class="fas fa-trash"></i></button>
+      {% endif %}
+    </div>
+  </div>
+  <div class="cc-details">
+    <div class="cc-det"><i class="fas fa-layer-group"></i> Sem {{ c.semester }}</div>
+    <div class="cc-det"><i class="fas fa-users"></i> {{ c.strength }} students</div>
+    <div class="cc-det"><i class="fas fa-book"></i> {{ c.subject_names|length }} subjects</div>
+  </div>
+  <div class="tag-row">
+    {% for sn in c.subject_names %}<span class="s-tag">{{ sn }}</span>{% endfor %}
+    {% if not c.subject_names %}<span class="text-muted small">No subjects assigned</span>{% endif %}
+  </div>
+</div>
+{% else %}<div class="empty-state"><i class="fas fa-door-open"></i><p>No classes yet.</p></div>{% endfor %}
+</div>
+
+<div class="modal fade" id="classModal" tabindex="-1">
+  <div class="modal-dialog modal-lg"><div class="modal-content cm">
+    <div class="cm-head"><h5 id="clsModalTitle">Add Class</h5><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+      <input type="hidden" id="classId"/>
+      <div class="row g-3">
+        <div class="col-md-4"><label class="form-label fw-600">Class Name * <small class="text-muted">(e.g. CSE-A)</small></label><input type="text" class="ctrl" id="clsName" placeholder="CSE-A"/></div>
+        <div class="col-md-4"><label class="form-label fw-600">Department *</label><select class="ctrl" id="clsDept"><option>CSE</option><option>ECE</option><option>MECH</option><option>CIVIL</option><option>OTHER</option></select></div>
+        <div class="col-md-2"><label class="form-label fw-600">Semester</label><input type="number" class="ctrl" id="clsSem" min="1" max="8" value="1"/></div>
+        <div class="col-md-2"><label class="form-label fw-600">Strength</label><input type="number" class="ctrl" id="clsStr" min="1" value="60"/></div>
+        <div class="col-12"><label class="form-label fw-600">Assign Subjects</label>
+          <div class="cb-grid">{% for subj in subjects %}<label class="cb-item"><input type="checkbox" class="cls-subj-cb" value="{{ subj.id }}"/><span>{{ subj.subject_name }} <small>({{ subj.department }} · {{ subj.periods_per_week }}p/w{% if subj.is_lab %} · Lab{% endif %})</small></span></label>{% endfor %}</div>
+        </div>
+      </div>
+    </div>
+    <div class="cm-foot"><button class="btn-cancel" data-bs-dismiss="modal">Cancel</button><button class="btn-save" onclick="saveClass()">Save Class</button></div>
+  </div></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const classModal=new bootstrap.Modal(document.getElementById('classModal'));
+function filterClasses(){
+  const q=document.getElementById('clsSearch').value.toLowerCase();
+  let n=0;
+  document.querySelectorAll('.class-card').forEach(c=>{
+    const show=!q||c.dataset.name.includes(q)||c.dataset.dept.includes(q);
+    c.style.display=show?'':'none'; if(show)n++;
+  });
+  document.getElementById('clsCount').textContent=n+' classes';
+}
+function openAddModal(){
+  document.getElementById('clsModalTitle').textContent='Add Class';
+  document.getElementById('classId').value=''; document.getElementById('clsName').value='';
+  document.getElementById('clsDept').value='CSE'; document.getElementById('clsSem').value=1; document.getElementById('clsStr').value=60;
+  document.querySelectorAll('.cls-subj-cb').forEach(c=>c.checked=false); classModal.show();
+}
+async function editClass(id){
+  const c=await fetch('/api/classes/'+id).then(r=>r.json());
+  document.getElementById('clsModalTitle').textContent='Edit Class';
+  document.getElementById('classId').value=c.id; document.getElementById('clsName').value=c.name;
+  document.getElementById('clsDept').value=c.department; document.getElementById('clsSem').value=c.semester;
+  document.getElementById('clsStr').value=c.strength;
+  document.querySelectorAll('.cls-subj-cb').forEach(cb=>cb.checked=c.subjects.includes(parseInt(cb.value)));
+  classModal.show();
+}
+async function saveClass(){
+  const id=document.getElementById('classId').value;
+  const subjects=[...document.querySelectorAll('.cls-subj-cb:checked')].map(c=>parseInt(c.value));
+  const data={name:document.getElementById('clsName').value,department:document.getElementById('clsDept').value,
+    semester:document.getElementById('clsSem').value,strength:document.getElementById('clsStr').value,subjects};
+  const r=await fetch(id?'/api/classes/'+id:'/api/classes',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  const d=await r.json(); if(d.success){classModal.hide();location.reload();}
+}
+async function delClass(id){if(!confirm('Delete class?'))return;await fetch('/api/classes/'+id,{method:'DELETE'});location.reload();}
+</script>
+{% endblock %}

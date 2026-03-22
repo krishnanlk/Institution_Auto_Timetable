@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Register Institution – EduSchedule Pro</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <link href="/static/css/style.css" rel="stylesheet"/>
+</head>
+<body class="auth-body">
+<div class="auth-split">
+  <div class="auth-left">
+    <div class="auth-brand"><div class="auth-logo">🏫</div><h1>New Institution?</h1><p>Register your institution and start building smart timetables in minutes.</p></div>
+    <div class="auth-features">
+      <div class="af-item"><i class="fas fa-check-circle"></i><span>Completely isolated data per institution</span></div>
+      <div class="af-item"><i class="fas fa-check-circle"></i><span>Start fresh with zero data</span></div>
+      <div class="af-item"><i class="fas fa-check-circle"></i><span>Add multiple admin/viewer users</span></div>
+      <div class="af-item"><i class="fas fa-check-circle"></i><span>Custom period & break timings</span></div>
+    </div>
+  </div>
+  <div class="auth-right">
+    <div class="auth-card" style="max-width:480px">
+      <div class="auth-tabs">
+        <button class="auth-tab" onclick="window.location='/login'">Sign In</button>
+        <button class="auth-tab active">Register Institution</button>
+      </div>
+      <h2>Register Your Institution</h2>
+      <p class="auth-sub">Create an isolated workspace for your college</p>
+      {% with messages = get_flashed_messages(with_categories=true) %}{% for cat,msg in messages %}<div class="alert alert-{{ cat }} py-2 small">{{ msg }}</div>{% endfor %}{% endwith %}
+      <form method="POST" action="/register">
+        <div class="row g-3">
+          <div class="col-12">
+            <div class="field-group"><label>Institution Name *</label><div class="field-wrap"><i class="fas fa-university"></i><input type="text" name="inst_name" class="field-input" placeholder="e.g. ABC College of Engineering" required/></div></div>
+          </div>
+          <div class="col-md-6">
+            <div class="field-group"><label>Institution Code * <small class="text-muted">(unique login key)</small></label><div class="field-wrap"><i class="fas fa-key"></i><input type="text" name="inst_code" class="field-input" placeholder="e.g. ABC2024" required style="text-transform:uppercase" id="instCode"/></div></div>
+          </div>
+          <div class="col-md-6">
+            <div class="field-group"><label>Logo Emoji</label><div class="field-wrap"><i class="fas fa-smile"></i><input type="text" name="logo_text" class="field-input" placeholder="🏫" value="🏫" maxlength="4"/></div></div>
+          </div>
+          <div class="col-12"><div class="field-group"><label>Address</label><div class="field-wrap"><i class="fas fa-map-marker-alt"></i><input type="text" name="address" class="field-input" placeholder="College address"/></div></div></div>
+          <div class="col-md-6"><div class="field-group"><label>Contact Email</label><div class="field-wrap"><i class="fas fa-envelope"></i><input type="email" name="email" class="field-input" placeholder="principal@college.edu"/></div></div></div>
+          <div class="col-md-6"><div class="field-group"><label>Phone</label><div class="field-wrap"><i class="fas fa-phone"></i><input type="text" name="phone" class="field-input" placeholder="+91 00000 00000"/></div></div></div>
+          <div class="col-12"><hr style="border-color:var(--border)"/><p class="small text-muted mb-2"><i class="fas fa-user-shield me-1"></i>Admin Account Credentials</p></div>
+          <div class="col-md-6"><div class="field-group"><label>Admin Username *</label><div class="field-wrap"><i class="fas fa-user"></i><input type="text" name="username" class="field-input" placeholder="admin" required/></div></div></div>
+          <div class="col-md-6"><div class="field-group"><label>Password *</label><div class="field-wrap"><i class="fas fa-lock"></i><input type="password" name="password" class="field-input" placeholder="Min 6 characters" required minlength="6"/></div></div></div>
+        </div>
+        <button type="submit" class="btn-auth mt-3">Register Institution <i class="fas fa-arrow-right ms-1"></i></button>
+        <p class="auth-hint">Already registered? <a href="/login">Sign in here</a></p>
+      </form>
+    </div>
+  </div>
+</div>
+<script>
+document.getElementById('instCode').addEventListener('input',function(){ this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,''); });
+</script>
+</body>
+</html>

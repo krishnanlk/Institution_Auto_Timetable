@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>{% block title %}EduSchedule Pro{% endblock %}</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+  <link href="/static/css/style.css" rel="stylesheet"/>
+</head>
+<body>
+{% if current_user %}
+<div class="app-wrapper">
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-logo">{{ current_user.logo_text or '🎓' }}</div>
+      <div class="brand-text">
+        <span class="brand-inst">{{ current_user.inst_name[:20] }}</span>
+        <span class="brand-sub">EduSchedule Pro</span>
+      </div>
+    </div>
+    <div class="sidebar-nav">
+      <span class="nav-label">MAIN</span>
+      <a href="/dashboard" class="nav-item {% if request.path in ('/','/dashboard') %}active{% endif %}"><i class="fas fa-th-large"></i><span>Dashboard</span></a>
+      <span class="nav-label">MANAGE</span>
+      <a href="/staff"    class="nav-item {% if '/staff'    in request.path %}active{% endif %}"><i class="fas fa-users"></i><span>Staff</span></a>
+      <a href="/subjects" class="nav-item {% if '/subjects' in request.path %}active{% endif %}"><i class="fas fa-book"></i><span>Subjects</span></a>
+      <a href="/classes"  class="nav-item {% if '/classes'  in request.path %}active{% endif %}"><i class="fas fa-door-open"></i><span>Classes</span></a>
+      <span class="nav-label">SCHEDULE</span>
+      <a href="/timetable" class="nav-item {% if '/timetable' in request.path %}active{% endif %}"><i class="fas fa-calendar-alt"></i><span>Timetable</span></a>
+      <a href="/analytics" class="nav-item {% if '/analytics' in request.path %}active{% endif %}"><i class="fas fa-chart-bar"></i><span>Analytics</span></a>
+      {% if current_user.role == 'admin' %}
+      <span class="nav-label">SYSTEM</span>
+      <a href="/settings"  class="nav-item {% if '/settings'  in request.path %}active{% endif %}"><i class="fas fa-cog"></i><span>Settings</span></a>
+      {% endif %}
+    </div>
+    <div class="sidebar-footer">
+      <div class="user-info-sidebar">
+        <div class="user-ava">{{ current_user.username[0].upper() }}</div>
+        <div>
+          <div class="user-nm">{{ current_user.username }}</div>
+          <div class="user-role">
+            {% if current_user.role == 'admin' %}
+              <i class="fas fa-shield-alt me-1" style="color:var(--indigo)"></i>Admin
+            {% else %}
+              <i class="fas fa-eye me-1" style="color:var(--text3)"></i>Viewer
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      <a href="/logout" class="nav-item logout-item"><i class="fas fa-sign-out-alt"></i><span>Logout</span></a>
+    </div>
+  </nav>
+
+  <div class="main-content">
+    <div class="topbar">
+      <button class="sidebar-toggle" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
+      <div class="topbar-title">{% block page_title %}Dashboard{% endblock %}</div>
+      <div class="topbar-actions">
+        {% if current_user.role == 'admin' %}
+          {% block topbar_actions %}{% endblock %}
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="content-area">
+      {% if current_user.role == 'viewer' %}
+      <div class="banner banner-warn mb-3" style="padding:8px 14px;font-size:12.5px">
+        <i class="fas fa-eye me-1"></i>
+        You are logged in as a <strong>Viewer</strong>. You can view all data but cannot make changes.
+      </div>
+      {% endif %}
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for cat,msg in messages %}
+          <div class="alert alert-{{ cat }} alert-dismissible fade show">
+            <i class="fas fa-info-circle me-2"></i>{{ msg }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+          </div>
+        {% endfor %}
+      {% endwith %}
+
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+</div>
+{% else %}
+{% block auth_content %}{% endblock %}
+{% endif %}
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="/static/js/app.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

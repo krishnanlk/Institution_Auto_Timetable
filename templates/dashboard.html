@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Dashboard – EduSchedule Pro{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block content %}
+<div class="stats-grid">
+  <div class="stat-card blue"><div class="stat-icon"><i class="fas fa-users"></i></div><div class="stat-body"><div class="stat-num">{{ total_staff }}</div><div class="stat-lbl">Staff Members</div></div></div>
+  <div class="stat-card green"><div class="stat-icon"><i class="fas fa-book-open"></i></div><div class="stat-body"><div class="stat-num">{{ total_subjects }}</div><div class="stat-lbl">Subjects</div></div></div>
+  <div class="stat-card violet"><div class="stat-icon"><i class="fas fa-door-open"></i></div><div class="stat-body"><div class="stat-num">{{ total_classes }}</div><div class="stat-lbl">Classes</div></div></div>
+  <div class="stat-card amber"><div class="stat-icon"><i class="fas fa-clock"></i></div><div class="stat-body"><div class="stat-num">{{ total_slots }}</div><div class="stat-lbl">Scheduled Periods</div></div></div>
+</div>
+
+{% if active_timetable %}
+<div class="banner banner-success"><i class="fas fa-check-circle"></i> Active timetable: <strong>{{ active_timetable.name }}</strong> — {{ active_timetable.generated_at }}{% if active_timetable.conflicts > 0 %} <span class="badge bg-danger ms-2">{{ active_timetable.conflicts }} conflict(s)</span>{% else %} <span class="badge bg-success ms-2">No conflicts</span>{% endif %}</div>
+{% else %}
+<div class="banner banner-warn"><i class="fas fa-exclamation-triangle"></i> No active timetable. <a href="/timetable">Generate one now →</a></div>
+{% endif %}
+
+<div class="two-col-grid">
+  <div class="card-panel">
+    <div class="panel-head"><h3>Workload Distribution</h3><span class="panel-sub">Allocated vs Max periods</span></div>
+    <canvas id="workloadChart" height="280"></canvas>
+  </div>
+  <div class="card-panel">
+    <div class="panel-head"><h3>Top Performers</h3><span class="panel-sub">Ranked by performance score</span></div>
+    <canvas id="perfChart" height="280"></canvas>
+  </div>
+</div>
+
+{% if tt_history %}
+<div class="card-panel mt-4">
+  <div class="panel-head"><h3>Timetable History</h3><span class="panel-sub">Recent generations</span></div>
+  <table class="data-table">
+    <thead><tr><th>Name</th><th>Generated</th><th>Conflicts</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for tt in tt_history %}
+    <tr>
+      <td><strong>{{ tt.name }}</strong></td>
+      <td>{{ tt.generated_at }}</td>
+      <td>{% if tt.conflicts > 0 %}<span class="badge bg-danger">{{ tt.conflicts }}</span>{% else %}<span class="badge bg-success">0</span>{% endif %}</td>
+      <td>{% if tt.is_active %}<span class="badge bg-primary">Active</span>{% else %}<span class="badge bg-secondary">Archived</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+async function loadDash(){
+  const [w,p] = await Promise.all([
+    fetch('/api/dashboard/workload').then(r=>r.json()),
+    fetch('/api/dashboard/performance').then(r=>r.json())
+  ]);
+  new Chart(document.getElementById('workloadChart'),{
+    type:'bar',
+    data:{labels:w.labels,datasets:[
+      {label:'Allocated',data:w.allocated,backgroundColor:'rgba(99,102,241,.85)',borderRadius:5},
+      {label:'Max',data:w.max,backgroundColor:'rgba(99,102,241,.18)',borderRadius:5}
+    ]},
+    options:{responsive:true,plugins:{legend:{position:'top'}},scales:{x:{grid:{display:false}},y:{beginAtZero:true}}}
+  });
+  new Chart(document.getElementById('perfChart'),{
+    type:'bar',
+    data:{labels:p.labels,datasets:[{label:'Score',data:p.scores,backgroundColor:p.colors,borderRadius:5}]},
+    options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,grid:{display:false}},y:{grid:{display:false}}}}
+  });
+}
+loadDash();
+</script>
+{% endblock %}

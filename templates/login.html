@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Login – EduSchedule Pro</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <link href="/static/css/style.css" rel="stylesheet"/>
+</head>
+<body class="auth-body">
+<div class="auth-split">
+  <div class="auth-left">
+    <div class="auth-brand"><div class="auth-logo">🎓</div><h1>EduSchedule<span>Pro</span></h1><p>Smart Timetable Generator for Every Institution</p></div>
+    <div class="auth-features">
+      <div class="af-item"><i class="fas fa-building"></i><span>Multi-Institution Support</span></div>
+      <div class="af-item"><i class="fas fa-magic"></i><span>Auto-generate conflict-free timetables</span></div>
+      <div class="af-item"><i class="fas fa-flask"></i><span>Lab & double-period scheduling</span></div>
+      <div class="af-item"><i class="fas fa-clock"></i><span>Custom time slots & breaks</span></div>
+      <div class="af-item"><i class="fas fa-chart-line"></i><span>Performance analytics & insights</span></div>
+    </div>
+  </div>
+  <div class="auth-right">
+    <div class="auth-card">
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="loginTab" onclick="switchTab('login')">Sign In</button>
+        <button class="auth-tab" id="registerTab" onclick="window.location='/register'">Register Institution</button>
+      </div>
+      <h2>Welcome Back</h2>
+      <p class="auth-sub">Sign in with your institution code</p>
+      {% with messages = get_flashed_messages(with_categories=true) %}{% for cat,msg in messages %}<div class="alert alert-{{ cat }} py-2 small">{{ msg }}</div>{% endfor %}{% endwith %}
+      <form method="POST" action="/login">
+        <div class="field-group">
+          <label>Institution Code</label>
+          <div class="field-wrap"><i class="fas fa-building"></i><input type="text" name="inst_code" class="field-input" placeholder="e.g. DEMO2024" required style="text-transform:uppercase"/></div>
+        </div>
+        <div class="field-group">
+          <label>Username</label>
+          <div class="field-wrap"><i class="fas fa-user"></i><input type="text" name="username" class="field-input" placeholder="Enter username" required/></div>
+        </div>
+        <div class="field-group">
+          <label>Password</label>
+          <div class="field-wrap"><i class="fas fa-lock"></i><input type="password" name="password" class="field-input" placeholder="Enter password" required/></div>
+        </div>
+        <button type="submit" class="btn-auth">Sign In <i class="fas fa-arrow-right ms-1"></i></button>
+        <p class="auth-hint">Demo: Code <strong>DEMO2024</strong> · User <strong>admin</strong> · Pass <strong>admin123</strong></p>
+      </form>
+    </div>
+  </div>
+</div>
+<script>
+function switchTab(t){ document.getElementById('loginTab').classList.toggle('active',t==='login'); }
+// Auto-uppercase institution code
+document.querySelector('input[name=inst_code]').addEventListener('input',function(){ this.value=this.value.toUpperCase(); });
+</script>
+</body>
+</html>

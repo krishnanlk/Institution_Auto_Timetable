@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Subjects – EduSchedule Pro{% endblock %}
+{% block page_title %}Subject Management{% endblock %}
+{% block topbar_actions %}<button class="btn-primary-sm" onclick="openAddModal()"><i class="fas fa-plus me-1"></i>Add Subject</button>{% endblock %}
+{% block content %}
+<div class="search-bar-row"><div class="search-wrap"><i class="fas fa-search"></i><input type="text" id="subSearch" class="search-input" placeholder="Search subjects…" oninput="filterSubjects()"/></div><span class="result-count" id="subCount">{{ subjects|length }} subjects</span></div>
+<div class="card-panel">
+<table class="data-table" id="subTable">
+  <thead><tr><th>#</th><th>Subject</th><th>Code</th><th>Department</th><th>Periods/Week</th><th>Type</th><th>Difficulty</th><th>Actions</th></tr></thead>
+  <tbody>
+  {% for s in subjects %}
+  <tr data-name="{{ s.subject_name|lower }}" data-dept="{{ s.department|lower }}">
+    <td>{{ loop.index }}</td>
+    <td><strong>{{ s.subject_name }}</strong></td>
+    <td><code class="code-tag">{{ s.subject_code or '—' }}</code></td>
+    <td><span class="dept-tag">{{ s.department }}</span></td>
+    <td><span class="num-tag">{{ s.periods_per_week }}×/week</span></td>
+    <td>{% if s.is_lab %}<span class="badge bg-warning text-dark"><i class="fas fa-flask me-1"></i>Lab ({{ s.lab_duration }}p)</span>{% else %}<span class="badge bg-light text-dark">Lecture</span>{% endif %}</td>
+    <td>
+      <div class="star-row">{% for i in range(1,6) %}<i class="fas fa-star {% if i<=s.difficulty_level %}son{% else %}soff{% endif %}"></i>{% endfor %}
+      <small class="text-muted ms-1">{{ s.difficulty_level }}/5</small></div>
+    </td>
+    <td>
+      <div class="act-row">
+        {% if current_user.role == "admin" %}
+        <button class="btn-icon-sm blue" onclick="editSubject({{ s.id }})"><i class="fas fa-edit"></i></button>
+        {% endif %}
+        <button class="btn-icon-sm amber" onclick="showRec({{ s.id }},'{{ s.subject_name }}')" title="Recommend Staff"><i class="fas fa-lightbulb"></i></button>
+        {% if current_user.role == "admin" %}
+        <button class="btn-icon-sm red" onclick="delSubject({{ s.id }})"><i class="fas fa-trash"></i></button>
+        {% endif %}
+      </div>
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="8" class="text-center py-4 text-muted">No subjects added yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<div class="modal fade" id="subjectModal" tabindex="-1">
+  <div class="modal-dialog"><div class="modal-content cm">
+    <div class="cm-head"><h5 id="subModalTitle">Add Subject</h5><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+      <input type="hidden" id="subjectId"/>
+      <div class="row g-3">
+        <div class="col-md-8"><label class="form-label fw-600">Subject Name *</label><input type="text" class="ctrl" id="subName"/></div>
+        <div class="col-md-4"><label class="form-label fw-600">Code</label><input type="text" class="ctrl" id="subCode"/></div>
+        <div class="col-md-6"><label class="form-label fw-600">Department *</label><select class="ctrl" id="subDept"><option>CSE</option><option>ECE</option><option>MECH</option><option>CIVIL</option><option>COMMON</option><option>OTHER</option></select></div>
+        <div class="col-md-3"><label class="form-label fw-600">Periods/Week</label><input type="number" class="ctrl" id="subPeriods" min="1" max="20" value="3"/></div>
+        <div class="col-md-3"><label class="form-label fw-600">Difficulty (1-5)</label><input type="number" class="ctrl" id="subDiff" min="1" max="5" value="3"/></div>
+        <div class="col-12">
+          <div class="toggle-field">
+            <label class="form-label fw-600">Subject Type</label>
+            <div class="type-toggle">
+              <label class="type-opt active" id="typeLeaLabel"><input type="radio" name="subType" value="0" checked onchange="toggleSubType(0)"/> Lecture</label>
+              <label class="type-opt" id="typeLabLabel"><input type="radio" name="subType" value="1" onchange="toggleSubType(1)"/> Lab / Practical</label>
+            </div>
+          </div>
+          <div id="labDurField" style="display:none" class="mt-2">
+            <label class="form-label fw-600">Consecutive Periods Needed</label>
+            <input type="number" class="ctrl" id="labDuration" min="2" max="4" value="2"/>
+            <small class="text-muted">e.g. 2 = lab takes 2 back-to-back periods</small>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="cm-foot"><button class="btn-cancel" data-bs-dismiss="modal">Cancel</button><button class="btn-save" onclick="saveSubject()">Save Subject</button></div>
+  </div></div>
+</div>
+
+<div class="modal fade" id="recModal" tabindex="-1">
+  <div class="modal-dialog modal-lg"><div class="modal-content cm">
+    <div class="cm-head"><h5>Staff Recommendations — <span id="recSubjectName"></span></h5><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body" id="recBody"></div>
+  </div></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const subjectModal=new bootstrap.Modal(document.getElementById('subjectModal'));
+const recModal=new bootstrap.Modal(document.getElementById('recModal'));
+function filterSubjects(){
+  const q=document.getElementById('subSearch').value.toLowerCase();
+  let n=0;
+  document.querySelectorAll('#subTable tbody tr[data-name]').forEach(r=>{
+    const show=!q||r.dataset.name.includes(q)||r.dataset.dept.includes(q);
+    r.style.display=show?'':'none'; if(show)n++;
+  });
+  document.getElementById('subCount').textContent=n+' subjects';
+}
+function toggleSubType(isLab){
+  document.getElementById('labDurField').style.display=isLab?'block':'none';
+  document.getElementById('typeLeaLabel').classList.toggle('active',!isLab);
+  document.getElementById('typeLabLabel').classList.toggle('active',!!isLab);
+}
+function openAddModal(){
+  document.getElementById('subModalTitle').textContent='Add Subject';
+  document.getElementById('subjectId').value='';
+  document.getElementById('subName').value=''; document.getElementById('subCode').value='';
+  document.getElementById('subDept').value='CSE'; document.getElementById('subPeriods').value=3;
+  document.getElementById('subDiff').value=3; toggleSubType(0);
+  document.querySelectorAll('input[name=subType]')[0].checked=true;
+  subjectModal.show();
+}
+async function editSubject(id){
+  const rows=await fetch('/api/subjects').then(r=>r.json());
+  const s=rows.find(x=>x.id===id); if(!s)return;
+  document.getElementById('subModalTitle').textContent='Edit Subject';
+  document.getElementById('subjectId').value=s.id;
+  document.getElementById('subName').value=s.subject_name; document.getElementById('subCode').value=s.subject_code||'';
+  document.getElementById('subDept').value=s.department; document.getElementById('subPeriods').value=s.periods_per_week;
+  document.getElementById('subDiff').value=s.difficulty_level;
+  document.getElementById('labDuration').value=s.lab_duration||2;
+  const isLab=!!s.is_lab;
+  document.querySelectorAll('input[name=subType]').forEach(r=>{r.checked=parseInt(r.value)===s.is_lab;});
+  toggleSubType(isLab);
+  subjectModal.show();
+}
+async function saveSubject(){
+  const id=document.getElementById('subjectId').value;
+  const isLab=parseInt(document.querySelector('input[name=subType]:checked').value);
+  const data={subject_name:document.getElementById('subName').value,subject_code:document.getElementById('subCode').value,
+    department:document.getElementById('subDept').value,periods_per_week:document.getElementById('subPeriods').value,
+    difficulty_level:document.getElementById('subDiff').value,is_lab:isLab,lab_duration:document.getElementById('labDuration').value};
+  const r=await fetch(id?'/api/subjects/'+id:'/api/subjects',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  const d=await r.json(); if(d.success){subjectModal.hide();location.reload();}
+}
+async function delSubject(id){if(!confirm('Delete subject?'))return;await fetch('/api/subjects/'+id,{method:'DELETE'});location.reload();}
+async function showRec(id,name){
+  document.getElementById('recSubjectName').textContent=name;
+  document.getElementById('recBody').innerHTML='<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-primary"></i></div>';
+  recModal.show();
+  const recs=await fetch('/api/subjects/'+id+'/recommend').then(r=>r.json());
+  if(!recs.length){document.getElementById('recBody').innerHTML='<p class="text-muted text-center py-4">No eligible staff found for this subject.</p>';return;}
+  const mx=recs[0].recommendation_score||1;
+  let html='<div class="rec-list">';
+  recs.forEach((r,i)=>{
+    const pct=Math.min(100,Math.round(r.recommendation_score/mx*100));
+    html+=`<div class="rec-item"><div class="rec-rank">#${i+1}</div><div class="rec-ava">${r.name[0]}</div>
+      <div class="rec-info"><strong>${r.name}</strong><small>${r.department} · ${r.experience} yrs exp · Past: ${r.past_periods} periods · Available: ${r.availability} more</small>
+      <div class="rec-bar"><div class="rec-bar-fill" style="width:${pct}%"></div></div></div>
+      <div class="rec-score">${r.recommendation_score}</div></div>`;
+  });
+  html+='</div>';
+  document.getElementById('recBody').innerHTML=html;
+}
+</script>
+{% endblock %}

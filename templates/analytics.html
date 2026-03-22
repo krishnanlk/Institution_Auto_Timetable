@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Analytics – EduSchedule Pro{% endblock %}
+{% block page_title %}Analytics & Insights{% endblock %}
+{% block content %}
+{% set promotions  = results | selectattr('suggestion','equalto','Promotion')    | list %}
+{% set hikes       = results | selectattr('suggestion','equalto','Salary Hike')  | list %}
+{% set overloaded  = results | selectattr('suggestion','equalto','Overloaded')   | list %}
+{% set underutil   = results | selectattr('suggestion','equalto','Underutilized')| list %}
+
+<div class="stats-grid">
+  <div class="stat-card green"><div class="stat-icon"><i class="fas fa-trophy"></i></div><div class="stat-body"><div class="stat-num">{{ promotions|length }}</div><div class="stat-lbl">Promotion Candidates</div></div></div>
+  <div class="stat-card blue"><div class="stat-icon"><i class="fas fa-coins"></i></div><div class="stat-body"><div class="stat-num">{{ hikes|length }}</div><div class="stat-lbl">Salary Hike Eligible</div></div></div>
+  <div class="stat-card red"><div class="stat-icon"><i class="fas fa-fire"></i></div><div class="stat-body"><div class="stat-num">{{ overloaded|length }}</div><div class="stat-lbl">Overloaded Staff</div></div></div>
+  <div class="stat-card amber"><div class="stat-icon"><i class="fas fa-battery-quarter"></i></div><div class="stat-body"><div class="stat-num">{{ underutil|length }}</div><div class="stat-lbl">Underutilized Staff</div></div></div>
+</div>
+
+<div class="formula-banner">
+  <span class="fb-label"><i class="fas fa-calculator me-2"></i>Score Formula</span>
+  <div class="fb-body">
+    <span class="fb-part"><span class="fb-coef">0.4</span> × Periods Handled</span>
+    <span class="fb-op">+</span>
+    <span class="fb-part"><span class="fb-coef">0.3</span> × Years Experience</span>
+    <span class="fb-op">+</span>
+    <span class="fb-part"><span class="fb-coef">0.3</span> × Avg. Difficulty</span>
+  </div>
+  <div class="fb-rule">Top 10% → Promotion &nbsp;|&nbsp; Next 20% → Salary Hike &nbsp;|&nbsp; &gt;90% load → Overloaded &nbsp;|&nbsp; &lt;30% load → Underutilized</div>
+</div>
+
+<div class="card-panel">
+  <div class="panel-head">
+    <h3>Staff Performance Ranking</h3>
+    <div class="filter-pills">
+      <button class="fpill active" onclick="filterTable('all',this)">All</button>
+      <button class="fpill" onclick="filterTable('Promotion',this)">Promotion</button>
+      <button class="fpill" onclick="filterTable('Salary Hike',this)">Hike</button>
+      <button class="fpill" onclick="filterTable('Overloaded',this)">Overloaded</button>
+      <button class="fpill" onclick="filterTable('Underutilized',this)">Underutilized</button>
+    </div>
+  </div>
+  <table class="data-table" id="analyticsTable">
+    <thead><tr><th>Rank</th><th>Staff</th><th>Dept</th><th>Exp</th><th>Periods</th><th>Workload</th><th>Score</th><th>Suggestion</th></tr></thead>
+    <tbody>
+    {% for r in results %}
+    <tr data-suggestion="{{ r.suggestion }}">
+      <td>{% if r.rank==1 %}<span style="font-size:20px">🥇</span>{% elif r.rank==2 %}<span style="font-size:20px">🥈</span>{% elif r.rank==3 %}<span style="font-size:20px">🥉</span>{% else %}<strong class="text-muted">#{{ r.rank }}</strong>{% endif %}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="mini-ava">{{ r.staff.name[0] }}</div>
+          <div><strong>{{ r.staff.name }}</strong><small class="d-block text-muted">{{ r.staff.email or '' }}</small></div>
+        </div>
+      </td>
+      <td><span class="dept-tag">{{ r.staff.department }}</span></td>
+      <td>{{ r.staff.experience }} yrs</td>
+      <td>{{ r.staff.allocated_periods }} / {{ r.staff.max_periods_per_week }}</td>
+      <td>
+        <div class="wl-bar-wrap">
+          <div class="wl-bar"><div class="wl-fill {% if r.overload_pct>90 %}danger{% elif r.overload_pct>70 %}warn{% else %}ok{% endif %}" style="width:{{ r.overload_pct }}%"></div></div>
+          <span class="wl-pct">{{ r.overload_pct }}%</span>
+        </div>
+      </td>
+      <td><strong style="color:var(--indigo);font-size:15px">{{ r.staff.performance_score }}</strong></td>
+      <td><span class="badge bg-{{ r.badge }} suggestion-badge">{{ r.suggestion }}</span></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="two-col-grid mt-4">
+  <div class="card-panel">
+    <div class="panel-head"><h3>Score Distribution</h3></div>
+    <canvas id="scoreChart" height="260"></canvas>
+  </div>
+  <div class="card-panel">
+    <div class="panel-head"><h3>Workload Overview</h3></div>
+    <canvas id="wlChart" height="260"></canvas>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const results = {{ results | tojson }};
+const cmap={'Promotion':'#10b981','Salary Hike':'#3b82f6','Overloaded':'#ef4444','Underutilized':'#f59e0b','Normal':'#6b7280'};
+new Chart(document.getElementById('scoreChart'),{
+  type:'bar',
+  data:{labels:results.map(r=>r.staff.name),datasets:[{label:'Score',data:results.map(r=>r.staff.performance_score),backgroundColor:results.map(r=>cmap[r.suggestion]||'#6b7280'),borderRadius:5}]},
+  options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:{size:10}}},y:{beginAtZero:true}}}
+});
+new Chart(document.getElementById('wlChart'),{
+  type:'doughnut',
+  data:{
+    labels:['Overloaded (>90%)','High (70-90%)','Normal','Underutilized (<30%)'],
+    datasets:[{data:[
+      results.filter(r=>r.overload_pct>90).length,
+      results.filter(r=>r.overload_pct>70&&r.overload_pct<=90).length,
+      results.filter(r=>r.overload_pct>=30&&r.overload_pct<=70).length,
+      results.filter(r=>r.overload_pct<30).length
+    ],backgroundColor:['#ef4444','#f59e0b','#10b981','#3b82f6'],borderWidth:0}]
+  },
+  options:{responsive:true,plugins:{legend:{position:'bottom'}}}
+});
+function filterTable(f,btn){
+  document.querySelectorAll('.fpill').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
+  document.querySelectorAll('#analyticsTable tbody tr').forEach(r=>{r.style.display=(f==='all'||r.dataset.suggestion===f)?'':'none';});
+}
+</script>
+{% endblock %}
