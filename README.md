@@ -1,4 +1,4 @@
-# EduSchedule Pro v2 — Multi-Tenant Timetable Generator
+# EduSchedule — Timetable Generator
 
 ## Quick Start
 
@@ -14,7 +14,7 @@ Institution Code: **DEMO2024**  |  Username: **admin**  |  Password: **admin123*
 ## Register New Institution
 Go to /register → fill form → get your own isolated workspace
 
-## What's New in v2
+## What's New in this
 - Multi-tenant: each institution has 100% isolated data
 - Institution registration system
 - Time Allocator: configure periods/day, working days, break/lunch slots
