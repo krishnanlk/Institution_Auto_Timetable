@@ -94,8 +94,6 @@
     </select>
     <div id="exportBtns" style="display:none;gap:8px;display:flex">
       <button class="btn-outline-sm" onclick="exportCSV()"><i class="fas fa-file-csv me-1"></i>CSV</button>
-      <button class="btn-outline-sm" onclick="exportPDF()"><i class="fas fa-file-pdf me-1"></i>PDF</button>
-      <button class="btn-outline-sm" onclick="openOfficialPrint()" style="background:#eef2ff;color:#4338ca;border-color:#c7d2fe;font-weight:600"><i class="fas fa-file-invoice me-1"></i>Official Format</button>
       <button class="btn-primary-sm" onclick="downloadImageDirect()" style="background:#10b981;border:none;font-weight:600"><i class="fas fa-image me-1"></i>Download Image</button>
     </div>
     {% if active_timetable and current_user.role in ('admin', 'creator') %}
@@ -718,8 +716,6 @@ async function deleteTT() {
 // Export
 // ══════════════════════════════════════════════════════════════════════════
 function exportCSV() { window.open(`/api/timetable/export/csv/${currentClassId}`, '_blank'); }
-function exportPDF() { window.open(`/api/timetable/export/pdf/${currentClassId}`, '_blank'); }
-function openOfficialPrint() { if (currentClassId) window.open(`/timetable/print/${currentClassId}`, '_blank'); }
 function downloadImageDirect() { if (currentClassId) window.open(`/timetable/print/${currentClassId}`, '_blank'); }
 
 // ══════════════════════════════════════════════════════════════════════════

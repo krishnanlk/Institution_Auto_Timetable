@@ -1009,65 +1009,8 @@ def api_export_csv(class_id):
 @app.route("/api/timetable/export/pdf/<int:class_id>")
 @login_required
 def api_export_pdf(class_id):
-    iid = inst_id()
-    tt_id, grid = get_class_timetable(class_id, iid)
-    if not tt_id:
-        return "No timetable", 404
-    try:
-        from reportlab.lib.pagesizes import A4, landscape
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
-        from reportlab.lib.styles import getSampleStyleSheet
-        from reportlab.lib import colors
-
-        days  = get_working_days(iid)
-        slots = get_period_slots(iid)
-        buf   = io.BytesIO()
-        doc   = SimpleDocTemplate(buf, pagesize=landscape(A4), topMargin=30, bottomMargin=30)
-        styles = getSampleStyleSheet()
-
-        table_data = [["Slot/Time"] + days]
-        for s in slots:
-            row = [f"{s['label']}\n{s['start_time']}-{s['end_time']}"]
-            for day in days:
-                cell = grid.get(day, {}).get(s["slot_order"])
-                if s["slot_type"] != "period":
-                    row.append(f"── {s['label']} ──")
-                elif cell:
-                    lab = " [LAB]" if cell.get("is_lab") else ""
-                    row.append(f"{cell['subject_name']}{lab}\n{cell['staff_name']}")
-                else:
-                    row.append("")
-            table_data.append(row)
-
-        col_widths = [110] + [int((landscape(A4)[0] - 150) / len(days))] * len(days)
-        t = Table(table_data, colWidths=col_widths, repeatRows=1)
-        t.setStyle(TableStyle([
-            ("BACKGROUND",  (0, 0), (-1, 0), colors.HexColor("#4f46e5")),
-            ("TEXTCOLOR",   (0, 0), (-1, 0), colors.white),
-            ("FONTNAME",    (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("FONTSIZE",    (0, 0), (-1, -1), 8),
-            ("ALIGN",       (0, 0), (-1, -1), "CENTER"),
-            ("VALIGN",      (0, 0), (-1, -1), "MIDDLE"),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8f8ff")]),
-            ("GRID",        (0, 0), (-1, -1), 0.5, colors.HexColor("#e5e7eb")),
-            ("LEFTPADDING", (0, 0), (-1, -1), 4),
-            ("RIGHTPADDING",(0, 0), (-1, -1), 4),
-            ("TOPPADDING",  (0, 0), (-1, -1), 6),
-            ("BOTTOMPADDING",(0, 0), (-1, -1), 6),
-        ]))
-
-        with get_db() as conn:
-            cls = conn.execute("SELECT name FROM class_section WHERE id=?", (class_id,)).fetchone()
-        cls_name = dict(cls)["name"] if cls else str(class_id)
-        title = Paragraph(f"Timetable — {cls_name}", styles["h2"])
-        doc.build([title, t])
-
-        resp = make_response(buf.getvalue())
-        resp.headers["Content-Type"]        = "application/pdf"
-        resp.headers["Content-Disposition"] = f"attachment; filename=timetable_{cls_name}.pdf"
-        return resp
-    except ImportError:
-        return "ReportLab not installed. Run: pip install reportlab", 500
+    """Redirect to official 1-page printable timetable with Print/PDF and PNG download."""
+    return redirect(url_for("timetable_print_page", class_id=class_id))
 
 
 @app.route("/timetable/print/<int:class_id>")
