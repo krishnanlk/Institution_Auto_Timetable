@@ -19,11 +19,11 @@ __pycache__/
 .env
 .env.local
 
-# Temporary local databases & logs
-*.db
+# Temporary local databases & logs (keep edupro.db for SQLite fallback)
 edupro_temp*.db
 *.log
 scratch/
 .tempmediaStorage/
 .user_uploaded/
 .system_generated/
+
