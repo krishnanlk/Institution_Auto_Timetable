@@ -1,57 +1,846 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Login – EduSchedule Pro</title>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet"/>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
-  <link href="/static/css/style.css" rel="stylesheet"/>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Campus Portal – SchedHub</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Cinzel:wght@700&display=swap" rel="stylesheet"/>
+  
+  <style>
+    :root {
+      --primary: #4338ca;
+      --primary-dark: #312e81;
+      --primary-light: #6366f1;
+      --accent: #d97706;
+      --accent-light: #f59e0b;
+      --dark: #090e1a;
+      --slate-800: #1e293b;
+      --slate-700: #334155;
+      --text-muted: #64748b;
+      --border-color: #e2e8f0;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      height: 100vh;
+      max-height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #090e1a;
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(67, 56, 202, 0.28) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(217, 119, 6, 0.16) 0px, transparent 50%),
+        radial-gradient(at 50% 50%, rgba(15, 23, 42, 0.95) 0px, transparent 100%);
+      color: #1e293b;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Ambient Background Watermarks */
+    .bg-decoration {
+      position: fixed;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.035;
+      font-size: 260px;
+      color: #ffffff;
+    }
+    .bg-dec-1 { top: -40px; left: -30px; }
+    .bg-dec-2 { bottom: -40px; right: -30px; }
+
+    /* Compact Nav Header */
+    .auth-nav-header {
+      position: relative;
+      z-index: 2;
+      text-align: center;
+      margin-bottom: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-crest {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, #4f46e5, #312e81);
+      border-radius: 11px;
+      color: #fff;
+      font-size: 18px;
+      box-shadow: 0 6px 16px rgba(79, 70, 229, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .brand-title {
+      font-family: 'Cinzel', serif;
+      font-size: 24px;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: 1px;
+      line-height: 1;
+    }
+
+    .brand-title span {
+      color: #f59e0b;
+    }
+
+    .brand-subtitle {
+      font-size: 12px;
+      color: #94a3b8;
+      letter-spacing: 0.3px;
+      margin-top: 3px;
+    }
+
+    /* Mobile Segmented Bar */
+    .mobile-tab-switch {
+      display: none;
+      background: rgba(30, 41, 59, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 25px;
+      padding: 3px;
+      margin-bottom: 10px;
+      position: relative;
+      z-index: 5;
+      width: 300px;
+      max-width: 90vw;
+    }
+
+    .mob-tab-btn {
+      flex: 1;
+      border: none;
+      background: transparent;
+      color: #94a3b8;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: all 0.25s ease;
+    }
+
+    .mob-tab-btn.active {
+      background: var(--primary);
+      color: #ffffff;
+      box-shadow: 0 2px 8px rgba(67, 56, 202, 0.4);
+    }
+
+    /* ── Main Dual Sliding Container ── */
+    .auth-container {
+      background: #ffffff;
+      border-radius: 20px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.12);
+      position: relative;
+      overflow: hidden;
+      width: min(980px, 94vw);
+      height: min(540px, 80vh);
+      z-index: 1;
+      display: flex;
+    }
+
+    /* ── Form Containers ── */
+    .form-container {
+      position: absolute;
+      top: 0;
+      height: 100%;
+      width: 50%;
+      transition: all 0.65s cubic-bezier(0.77, 0, 0.175, 1);
+      background: #ffffff;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: #cbd5e1 transparent;
+    }
+
+    .form-container::-webkit-scrollbar {
+      width: 4px;
+    }
+    .form-container::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+
+    /* Sign In: Left side */
+    .sign-in-container {
+      left: 0;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 28px 36px;
+    }
+
+    /* Sign Up: Right side */
+    .sign-up-container {
+      left: 0;
+      opacity: 0;
+      z-index: 1;
+      padding: 20px 32px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    /* Sliding Animation */
+    .auth-container.right-panel-active .sign-in-container {
+      transform: translateX(100%);
+      opacity: 0;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .auth-container.right-panel-active .sign-up-container {
+      transform: translateX(100%);
+      opacity: 1;
+      z-index: 5;
+      animation: show 0.65s;
+    }
+
+    @keyframes show {
+      0%, 49.99% { opacity: 0; z-index: 1; }
+      50%, 100% { opacity: 1; z-index: 5; }
+    }
+
+    /* ── Sliding Overlay ── */
+    .overlay-container {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      width: 50%;
+      height: 100%;
+      overflow: hidden;
+      transition: transform 0.65s cubic-bezier(0.77, 0, 0.175, 1);
+      z-index: 100;
+    }
+
+    .auth-container.right-panel-active .overlay-container {
+      transform: translateX(-100%);
+    }
+
+    .overlay {
+      background: linear-gradient(135deg, #1e1b4b 0%, #312e81 40%, #1e293b 100%);
+      color: #ffffff;
+      position: relative;
+      left: -100%;
+      height: 100%;
+      width: 200%;
+      transform: translateX(0);
+      transition: transform 0.65s cubic-bezier(0.77, 0, 0.175, 1);
+      display: flex;
+    }
+
+    .auth-container.right-panel-active .overlay {
+      transform: translateX(50%);
+    }
+
+    .overlay-panel {
+      position: absolute;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      padding: 30px 40px;
+      text-align: center;
+      top: 0;
+      height: 100%;
+      width: 50%;
+      transition: transform 0.65s cubic-bezier(0.77, 0, 0.175, 1);
+    }
+
+    .overlay-left {
+      transform: translateX(-20%);
+    }
+
+    .auth-container.right-panel-active .overlay-left {
+      transform: translateX(0);
+    }
+
+    .overlay-right {
+      right: 0;
+      transform: translateX(0);
+    }
+
+    .auth-container.right-panel-active .overlay-right {
+      transform: translateX(20%);
+    }
+
+    .overlay-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      color: #fbbf24;
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 12px;
+    }
+
+    .overlay-heading {
+      font-family: 'Cinzel', serif;
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 10px;
+      line-height: 1.25;
+      color: #ffffff;
+    }
+
+    .overlay-text {
+      font-size: 12.5px;
+      color: #cbd5e1;
+      line-height: 1.5;
+      margin-bottom: 20px;
+      max-width: 320px;
+    }
+
+    .btn-ghost-pill {
+      background: transparent;
+      border: 1.5px solid #ffffff;
+      color: #ffffff;
+      font-size: 12.5px;
+      font-weight: 700;
+      padding: 8px 22px;
+      border-radius: 25px;
+      cursor: pointer;
+      letter-spacing: 0.4px;
+      transition: all 0.25s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .btn-ghost-pill:hover {
+      background: #ffffff;
+      color: var(--primary-dark);
+      box-shadow: 0 4px 12px rgba(255, 255, 255, 0.3);
+      transform: translateY(-1px);
+    }
+
+    /* ── Form Controls & Typography ── */
+    .form-heading {
+      font-size: 20px;
+      font-weight: 800;
+      color: #0f172a;
+      margin-bottom: 3px;
+    }
+
+    .form-subtext {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 14px;
+    }
+
+    .demo-login-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      color: #1d4ed8;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 7px;
+      cursor: pointer;
+      margin-bottom: 12px;
+      transition: all 0.2s;
+    }
+
+    .demo-login-chip:hover {
+      background: #dbeafe;
+      transform: translateY(-1px);
+    }
+
+    .input-field-group {
+      margin-bottom: 10px;
+    }
+
+    .input-field-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: #334155;
+      margin-bottom: 3px;
+    }
+
+    .input-field-label small {
+      font-weight: 500;
+      color: #64748b;
+    }
+
+    .input-box-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .input-icon {
+      position: absolute;
+      left: 12px;
+      color: #94a3b8;
+      font-size: 13px;
+      pointer-events: none;
+      transition: color 0.2s;
+    }
+
+    .form-control-academic {
+      width: 100%;
+      height: 36px;
+      padding: 6px 12px 6px 36px;
+      background: #f8fafc;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 12.5px;
+      font-family: inherit;
+      color: #0f172a;
+      transition: all 0.2s ease;
+    }
+
+    .form-control-academic:focus {
+      background: #ffffff;
+      border-color: var(--primary-light);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+      outline: none;
+    }
+
+    .form-control-academic:focus + .input-icon,
+    .input-box-wrap:focus-within .input-icon {
+      color: var(--primary);
+    }
+
+    .toggle-pw-btn {
+      position: absolute;
+      right: 10px;
+      background: none;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 13px;
+      padding: 2px;
+    }
+    .toggle-pw-btn:hover { color: #475569; }
+
+    .btn-academic-primary {
+      width: 100%;
+      height: 38px;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      color: #ffffff;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      margin-top: 12px;
+      box-shadow: 0 4px 12px rgba(67, 56, 202, 0.35);
+    }
+
+    .btn-academic-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 18px rgba(67, 56, 202, 0.45);
+      background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);
+    }
+
+    .section-divider-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10.5px;
+      font-weight: 700;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      margin: 8px 0 6px;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 3px;
+    }
+
+    /* ── Responsive adjustments ── */
+    @media (max-width: 860px) {
+      html, body {
+        overflow-y: auto;
+        height: auto;
+        min-height: 100vh;
+      }
+      .mobile-tab-switch { display: flex; }
+      .auth-container {
+        height: auto;
+        min-height: auto;
+        width: 95vw;
+        border-radius: 16px;
+      }
+      .overlay-container { display: none; }
+      .form-container {
+        position: static;
+        width: 100% !important;
+        transform: none !important;
+        opacity: 1 !important;
+        padding: 20px 18px;
+      }
+      .sign-in-container { display: block; }
+      .sign-up-container { display: none; }
+      .auth-container.right-panel-active .sign-in-container { display: none; }
+      .auth-container.right-panel-active .sign-up-container { display: block; }
+    }
+  </style>
 </head>
-<body class="auth-body">
-<div class="auth-split">
-  <div class="auth-left">
-    <div class="auth-brand"><div class="auth-logo">🎓</div><h1>EduSchedule<span>Pro</span></h1><p>Smart Timetable Generator for Every Institution</p></div>
-    <div class="auth-features">
-      <div class="af-item"><i class="fas fa-building"></i><span>Multi-Institution Support</span></div>
-      <div class="af-item"><i class="fas fa-magic"></i><span>Auto-generate conflict-free timetables</span></div>
-      <div class="af-item"><i class="fas fa-flask"></i><span>Lab & double-period scheduling</span></div>
-      <div class="af-item"><i class="fas fa-clock"></i><span>Custom time slots & breaks</span></div>
-      <div class="af-item"><i class="fas fa-chart-line"></i><span>Performance analytics & insights</span></div>
-    </div>
-  </div>
-  <div class="auth-right">
-    <div class="auth-card">
-      <div class="auth-tabs">
-        <button class="auth-tab active" id="loginTab" onclick="switchTab('login')">Sign In</button>
-        <button class="auth-tab" id="registerTab" onclick="window.location='/register'">Register Institution</button>
+<body>
+
+  <!-- Ambient College Crest Background Symbols -->
+  <div class="bg-decoration bg-dec-1"><i class="fas fa-graduation-cap"></i></div>
+  <div class="bg-decoration bg-dec-2"><i class="fas fa-landmark"></i></div>
+
+  <!-- Top Institutional Nav Header -->
+  <div class="auth-nav-header">
+    <div class="brand-row">
+      <div class="brand-crest">
+        <i class="fas fa-calendar-check"></i>
       </div>
-      <h2>Welcome Back</h2>
-      <p class="auth-sub">Sign in with your institution code</p>
-      {% with messages = get_flashed_messages(with_categories=true) %}{% for cat,msg in messages %}<div class="alert alert-{{ cat }} py-2 small">{{ msg }}</div>{% endfor %}{% endwith %}
-      <form method="POST" action="/login">
-        <div class="field-group">
-          <label>Institution Code</label>
-          <div class="field-wrap"><i class="fas fa-building"></i><input type="text" name="inst_code" class="field-input" placeholder="e.g. DEMO2024" required style="text-transform:uppercase"/></div>
-        </div>
-        <div class="field-group">
-          <label>Username</label>
-          <div class="field-wrap"><i class="fas fa-user"></i><input type="text" name="username" class="field-input" placeholder="Enter username" required/></div>
-        </div>
-        <div class="field-group">
-          <label>Password</label>
-          <div class="field-wrap"><i class="fas fa-lock"></i><input type="password" name="password" class="field-input" placeholder="Enter password" required/></div>
-        </div>
-        <button type="submit" class="btn-auth">Sign In <i class="fas fa-arrow-right ms-1"></i></button>
-        <p class="auth-hint">Demo: Code <strong>DEMO2024</strong> · User <strong>admin</strong> · Pass <strong>admin123</strong></p>
-      </form>
+      <div class="brand-title">Sched<span>Hub</span></div>
     </div>
+    <div class="brand-subtitle">Automated Institutional Timetable & Faculty Allocation Portal</div>
   </div>
-</div>
-<script>
-function switchTab(t){ document.getElementById('loginTab').classList.toggle('active',t==='login'); }
-// Auto-uppercase institution code
-document.querySelector('input[name=inst_code]').addEventListener('input',function(){ this.value=this.value.toUpperCase(); });
-</script>
+
+  <!-- Mobile Segmented Tab Switcher -->
+  <div class="mobile-tab-switch" id="mobileTabSwitch">
+    <button class="mob-tab-btn {% if mode != 'register' %}active{% endif %}" id="mobSignInBtn" onclick="setAuthMode('login')">
+      <i class="fas fa-sign-in-alt me-1"></i> Sign In
+    </button>
+    <button class="mob-tab-btn {% if mode == 'register' %}active{% endif %}" id="mobSignUpBtn" onclick="setAuthMode('register')">
+      <i class="fas fa-university me-1"></i> Register Institution
+    </button>
+  </div>
+
+  <!-- ═════════════════════ MAIN DUAL SLIDING CONTAINER ═════════════════════ -->
+  <div class="auth-container {% if mode == 'register' %}right-panel-active{% endif %}" id="authContainer">
+
+    <!-- ── SIGN IN FORM (Left side by default) ── -->
+    <div class="form-container sign-in-container">
+      <div>
+        <h2 class="form-heading">Campus Sign In</h2>
+        <p class="form-subtext">Access your institution's timetables, rooms, and faculty schedules</p>
+
+        <!-- Quick Demo Login helper -->
+        <div class="demo-login-chip" onclick="fillDemoCredentials()" title="Click to auto-fill sample college credentials">
+          <i class="fas fa-bolt text-amber-500"></i>
+          <span>Quick Demo: <strong>DEMO2024</strong> / <strong>admin</strong></span>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert alert-{{ category }} py-1 px-2 mb-2 small d-flex align-items-center gap-2" style="font-size:11.5px;">
+                <i class="fas fa-{% if category == 'danger' %}exclamation-circle{% else %}check-circle{% endif %}"></i>
+                <span>{{ message }}</span>
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="/login" id="signInForm">
+          <div class="input-field-group">
+            <label class="input-field-label">
+              <span>Institution Code *</span>
+              <small>Unique college ID</small>
+            </label>
+            <div class="input-box-wrap">
+              <i class="fas fa-building input-icon"></i>
+              <input type="text" name="inst_code" id="loginInstCode" class="form-control-academic" placeholder="e.g. DEMO2024" required autocomplete="off" style="text-transform: uppercase;"/>
+            </div>
+          </div>
+
+          <div class="input-field-group">
+            <label class="input-field-label">
+              <span>Username *</span>
+              <small>Admin or Faculty</small>
+            </label>
+            <div class="input-box-wrap">
+              <i class="fas fa-user input-icon"></i>
+              <input type="text" name="username" id="loginUsername" class="form-control-academic" placeholder="Enter username" required autocomplete="username"/>
+            </div>
+          </div>
+
+          <div class="input-field-group">
+            <label class="input-field-label">
+              <span>Password *</span>
+              <small><a href="javascript:void(0)" onclick="alert('Please contact your institution administrator to reset your password.')" style="color:var(--primary);text-decoration:none;">Forgot?</a></small>
+            </label>
+            <div class="input-box-wrap">
+              <i class="fas fa-lock input-icon"></i>
+              <input type="password" name="password" id="loginPassword" class="form-control-academic" placeholder="••••••••" required autocomplete="current-password"/>
+              <button type="button" class="toggle-pw-btn" onclick="togglePasswordVisibility('loginPassword', this)">
+                <i class="fas fa-eye"></i>
+              </button>
+            </div>
+          </div>
+
+          <button type="submit" class="btn-academic-primary">
+            <span>Sign In to SchedHub</span>
+            <i class="fas fa-arrow-right"></i>
+          </button>
+        </form>
+
+        <p class="text-center mt-2 mb-0" style="font-size: 11.5px; color: #64748b;">
+          Registering a new college? 
+          <a href="javascript:void(0)" onclick="setAuthMode('register')" style="color:var(--primary); font-weight:700; text-decoration:none;">
+            Register here
+          </a>
+        </p>
+      </div>
+    </div>
+
+    <!-- ── SIGN UP FORM (Right side, slides in smoothly) ── -->
+    <div class="form-container sign-up-container">
+      <div>
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <h2 class="form-heading mb-0">Register Institution</h2>
+          <span class="badge bg-indigo-subtle text-primary border" style="font-size:10px;">Master Admin</span>
+        </div>
+        <p class="form-subtext mb-2">Set up your college & administrator in under a minute</p>
+
+        <form method="POST" action="/register" id="signUpForm" onsubmit="return validateSignUp()">
+          
+          <div class="section-divider-title">
+            <i class="fas fa-university text-indigo-600"></i>
+            <span>1. Institution Details</span>
+          </div>
+
+          <div class="row g-2">
+            <div class="col-md-7">
+              <div class="input-field-group">
+                <label class="input-field-label"><span>College Name *</span></label>
+                <div class="input-box-wrap">
+                  <i class="fas fa-graduation-cap input-icon"></i>
+                  <input type="text" name="inst_name" class="form-control-academic" placeholder="e.g. LK's Project" required/>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-5">
+              <div class="input-field-group">
+                <label class="input-field-label"><span>College Code *</span></label>
+                <div class="input-box-wrap">
+                  <i class="fas fa-id-badge input-icon"></i>
+                  <input type="text" name="inst_code" id="regInstCode" class="form-control-academic" placeholder="e.g. LKP2026" required style="text-transform: uppercase;"/>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row g-2">
+            <div class="col-md-6">
+              <div class="input-field-group">
+                <label class="input-field-label"><span>Official Email *</span></label>
+                <div class="input-box-wrap">
+                  <i class="fas fa-envelope-open-text input-icon"></i>
+                  <input type="email" name="inst_email" class="form-control-academic" placeholder="principal@college.edu" required/>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="input-field-group">
+                <label class="input-field-label"><span>Phone / Contact</span></label>
+                <div class="input-box-wrap">
+                  <i class="fas fa-phone input-icon"></i>
+                  <input type="text" name="phone" class="form-control-academic" placeholder="+91 422 123456"/>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="input-field-group">
+            <label class="input-field-label"><span>Campus Address / Location</span></label>
+            <div class="input-box-wrap">
+              <i class="fas fa-location-dot input-icon"></i>
+              <input type="text" name="address" class="form-control-academic" placeholder="City / Campus Location"/>
+            </div>
+          </div>
+
+          <div class="section-divider-title">
+            <i class="fas fa-user-shield text-indigo-600"></i>
+            <span>2. Master Administrator Credentials</span>
+          </div>
+
+          <div class="row g-2">
+            <div class="col-md-4">
+              <div class="input-field-group">
+                <label class="input-field-label"><span>Admin User *</span></label>
+                <div class="input-box-wrap">
+                  <i class="fas fa-user-check input-icon"></i>
+                  <input type="text" name="username" class="form-control-academic" placeholder="admin" required/>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="input-field-group">
+                <label class="input-field-label"><span>Password *</span></label>
+                <div class="input-box-wrap">
+                  <i class="fas fa-lock input-icon"></i>
+                  <input type="password" name="password" id="regPassword" class="form-control-academic" placeholder="Min 6 chars" required minlength="6"/>
+                  <button type="button" class="toggle-pw-btn" onclick="togglePasswordVisibility('regPassword', this)">
+                    <i class="fas fa-eye"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="input-field-group">
+                <label class="input-field-label"><span>Confirm *</span></label>
+                <div class="input-box-wrap">
+                  <i class="fas fa-shield-halved input-icon"></i>
+                  <input type="password" name="confirm_password" id="regConfirmPassword" class="form-control-academic" placeholder="Repeat pw" required/>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button type="submit" class="btn-academic-primary mt-1">
+            <span>Register College & Launch SchedHub</span>
+            <i class="fas fa-check-circle"></i>
+          </button>
+        </form>
+
+        <p class="text-center mt-2 mb-0" style="font-size: 11.5px; color: #64748b;">
+          Already registered? 
+          <a href="javascript:void(0)" onclick="setAuthMode('login')" style="color:var(--primary); font-weight:700; text-decoration:none;">
+            Sign in here
+          </a>
+        </p>
+      </div>
+    </div>
+
+    <!-- ── SLIDING OVERLAY CONTAINER ── -->
+    <div class="overlay-container">
+      <div class="overlay">
+        
+        <!-- Overlay Left: Visible when Register is active -->
+        <div class="overlay-panel overlay-left">
+          <span class="overlay-badge"><i class="fas fa-shield-alt"></i> Existing Campus</span>
+          <h1 class="overlay-heading">Already Enrolled?</h1>
+          <p class="overlay-text">
+            Sign in with your institution code to manage class timetables, assign faculty, adjust lab sessions, and export official printable sheets.
+          </p>
+          <button class="btn-ghost-pill" onclick="setAuthMode('login')">
+            <i class="fas fa-arrow-left"></i> Sign In to SchedHub
+          </button>
+        </div>
+
+        <!-- Overlay Right: Visible when Sign In is active -->
+        <div class="overlay-panel overlay-right">
+          <span class="overlay-badge"><i class="fas fa-sparkles"></i> New Institution</span>
+          <h1 class="overlay-heading">Onboard Your College</h1>
+          <p class="overlay-text">
+            Experience automated AI timetable scheduling with multi-period continuous labs, collision avoidance, and official institutional format.
+          </p>
+          <button class="btn-ghost-pill" onclick="setAuthMode('register')">
+            Register Institution <i class="fas fa-arrow-right"></i>
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const authContainer = document.getElementById('authContainer');
+    const mobSignInBtn = document.getElementById('mobSignInBtn');
+    const mobSignUpBtn = document.getElementById('mobSignUpBtn');
+
+    function setAuthMode(mode) {
+      if (mode === 'register') {
+        authContainer.classList.add('right-panel-active');
+        if (mobSignInBtn && mobSignUpBtn) {
+          mobSignInBtn.classList.remove('active');
+          mobSignUpBtn.classList.add('active');
+        }
+        window.history.replaceState({}, '', '/register');
+      } else {
+        authContainer.classList.remove('right-panel-active');
+        if (mobSignInBtn && mobSignUpBtn) {
+          mobSignUpBtn.classList.remove('active');
+          mobSignInBtn.classList.add('active');
+        }
+        window.history.replaceState({}, '', '/login');
+      }
+    }
+
+    function togglePasswordVisibility(inputId, btn) {
+      const input = document.getElementById(inputId);
+      const icon = btn.querySelector('i');
+      if (input.type === 'password') {
+        input.type = 'text';
+        icon.className = 'fas fa-eye-slash';
+      } else {
+        input.type = 'password';
+        icon.className = 'fas fa-eye';
+      }
+    }
+
+    function fillDemoCredentials() {
+      document.getElementById('loginInstCode').value = 'DEMO2024';
+      document.getElementById('loginUsername').value = 'admin';
+      document.getElementById('loginPassword').value = 'admin123';
+      
+      const chip = document.querySelector('.demo-login-chip');
+      chip.style.background = '#dcfce7';
+      chip.style.borderColor = '#86efac';
+      chip.style.color = '#15803d';
+      chip.innerHTML = '<i class="fas fa-check-circle"></i> Demo Credentials Filled!';
+      setTimeout(() => {
+        chip.style.background = '#eff6ff';
+        chip.style.borderColor = '#bfdbfe';
+        chip.style.color = '#1d4ed8';
+        chip.innerHTML = '<i class="fas fa-bolt text-amber-500"></i> Quick Demo: <strong>DEMO2024</strong> / <strong>admin</strong>';
+      }, 2000);
+    }
+
+    const codeInputs = ['loginInstCode', 'regInstCode'];
+    codeInputs.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('input', function() {
+          this.value = this.value.toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+        });
+      }
+    });
+
+    function validateSignUp() {
+      const p1 = document.getElementById('regPassword').value;
+      const p2 = document.getElementById('regConfirmPassword').value;
+      if (p1 !== p2) {
+        alert('Passwords do not match. Please verify your password entry.');
+        document.getElementById('regConfirmPassword').focus();
+        return false;
+      }
+      return true;
+    }
+  </script>
 </body>
 </html>

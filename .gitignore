@@ -1,0 +1,20 @@
+# Virtual environment
+.venv/
+env/
+venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.log
+
+# Environment variables with secrets
+.env
+
+# Temporary and local SQLite databases
+*.db
+!edupro.db
+
+# OS files
+.DS_Store
+Thumbs.db

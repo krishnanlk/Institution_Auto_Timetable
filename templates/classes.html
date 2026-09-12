@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Classes – EduSchedule Pro{% endblock %}
+{% block title %}Classes – SchedHub{% endblock %}
 {% block page_title %}Class Management{% endblock %}
 {% block topbar_actions %}<button class="btn-primary-sm" onclick="openAddModal()"><i class="fas fa-plus me-1"></i>Add Class</button>{% endblock %}
 {% block content %}
@@ -11,7 +11,7 @@
     <div class="cc-icon"><i class="fas fa-door-open"></i></div>
     <div class="cc-meta"><h4>{{ c.name }}</h4><span class="dept-tag">{{ c.department }}</span></div>
     <div class="sc-actions">
-      {% if current_user.role == "admin" %}
+      {% if current_user.role in ('admin', 'creator') %}
       <button class="btn-icon-sm blue" onclick="editClass({{ c.id }})"><i class="fas fa-edit"></i></button>
       <button class="btn-icon-sm red" onclick="delClass({{ c.id }})"><i class="fas fa-trash"></i></button>
       {% endif %}

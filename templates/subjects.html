@@ -1,17 +1,18 @@
 {% extends "base.html" %}
-{% block title %}Subjects – EduSchedule Pro{% endblock %}
+{% block title %}Subjects – SchedHub{% endblock %}
 {% block page_title %}Subject Management{% endblock %}
 {% block topbar_actions %}<button class="btn-primary-sm" onclick="openAddModal()"><i class="fas fa-plus me-1"></i>Add Subject</button>{% endblock %}
 {% block content %}
 <div class="search-bar-row"><div class="search-wrap"><i class="fas fa-search"></i><input type="text" id="subSearch" class="search-input" placeholder="Search subjects…" oninput="filterSubjects()"/></div><span class="result-count" id="subCount">{{ subjects|length }} subjects</span></div>
 <div class="card-panel">
 <table class="data-table" id="subTable">
-  <thead><tr><th>#</th><th>Subject</th><th>Code</th><th>Department</th><th>Periods/Week</th><th>Type</th><th>Difficulty</th><th>Actions</th></tr></thead>
+  <thead><tr><th>#</th><th>Subject</th><th>Abbr</th><th>Code</th><th>Department</th><th>Periods/Week</th><th>Type</th><th>Difficulty</th><th>Actions</th></tr></thead>
   <tbody>
   {% for s in subjects %}
   <tr data-name="{{ s.subject_name|lower }}" data-dept="{{ s.department|lower }}">
     <td>{{ loop.index }}</td>
     <td><strong>{{ s.subject_name }}</strong></td>
+    <td><span class="badge bg-secondary font-monospace">{{ s.abbreviation or '—' }}</span></td>
     <td><code class="code-tag">{{ s.subject_code or '—' }}</code></td>
     <td><span class="dept-tag">{{ s.department }}</span></td>
     <td><span class="num-tag">{{ s.periods_per_week }}×/week</span></td>
@@ -22,18 +23,18 @@
     </td>
     <td>
       <div class="act-row">
-        {% if current_user.role == "admin" %}
+        {% if current_user.role in ('admin', 'creator') %}
         <button class="btn-icon-sm blue" onclick="editSubject({{ s.id }})"><i class="fas fa-edit"></i></button>
         {% endif %}
         <button class="btn-icon-sm amber" onclick="showRec({{ s.id }},'{{ s.subject_name }}')" title="Recommend Staff"><i class="fas fa-lightbulb"></i></button>
-        {% if current_user.role == "admin" %}
+        {% if current_user.role in ('admin', 'creator') %}
         <button class="btn-icon-sm red" onclick="delSubject({{ s.id }})"><i class="fas fa-trash"></i></button>
         {% endif %}
       </div>
     </td>
   </tr>
   {% else %}
-  <tr><td colspan="8" class="text-center py-4 text-muted">No subjects added yet.</td></tr>
+  <tr><td colspan="9" class="text-center py-4 text-muted">No subjects added yet.</td></tr>
   {% endfor %}
   </tbody>
 </table>
@@ -45,8 +46,9 @@
     <div class="modal-body">
       <input type="hidden" id="subjectId"/>
       <div class="row g-3">
-        <div class="col-md-8"><label class="form-label fw-600">Subject Name *</label><input type="text" class="ctrl" id="subName"/></div>
-        <div class="col-md-4"><label class="form-label fw-600">Code</label><input type="text" class="ctrl" id="subCode"/></div>
+        <div class="col-md-6"><label class="form-label fw-600">Subject Name *</label><input type="text" class="ctrl" id="subName"/></div>
+        <div class="col-md-3"><label class="form-label fw-600">Abbreviation</label><input type="text" class="ctrl" id="subAbbr" placeholder="e.g. DS, ML"/></div>
+        <div class="col-md-3"><label class="form-label fw-600">Code</label><input type="text" class="ctrl" id="subCode" placeholder="e.g. CS101"/></div>
         <div class="col-md-6"><label class="form-label fw-600">Department *</label><select class="ctrl" id="subDept"><option>CSE</option><option>ECE</option><option>MECH</option><option>CIVIL</option><option>COMMON</option><option>OTHER</option></select></div>
         <div class="col-md-3"><label class="form-label fw-600">Periods/Week</label><input type="number" class="ctrl" id="subPeriods" min="1" max="20" value="3"/></div>
         <div class="col-md-3"><label class="form-label fw-600">Difficulty (1-5)</label><input type="number" class="ctrl" id="subDiff" min="1" max="5" value="3"/></div>
@@ -98,7 +100,7 @@ function toggleSubType(isLab){
 function openAddModal(){
   document.getElementById('subModalTitle').textContent='Add Subject';
   document.getElementById('subjectId').value='';
-  document.getElementById('subName').value=''; document.getElementById('subCode').value='';
+  document.getElementById('subName').value=''; document.getElementById('subAbbr').value=''; document.getElementById('subCode').value='';
   document.getElementById('subDept').value='CSE'; document.getElementById('subPeriods').value=3;
   document.getElementById('subDiff').value=3; toggleSubType(0);
   document.querySelectorAll('input[name=subType]')[0].checked=true;
@@ -109,7 +111,9 @@ async function editSubject(id){
   const s=rows.find(x=>x.id===id); if(!s)return;
   document.getElementById('subModalTitle').textContent='Edit Subject';
   document.getElementById('subjectId').value=s.id;
-  document.getElementById('subName').value=s.subject_name; document.getElementById('subCode').value=s.subject_code||'';
+  document.getElementById('subName').value=s.subject_name;
+  document.getElementById('subAbbr').value=s.abbreviation||'';
+  document.getElementById('subCode').value=s.subject_code||'';
   document.getElementById('subDept').value=s.department; document.getElementById('subPeriods').value=s.periods_per_week;
   document.getElementById('subDiff').value=s.difficulty_level;
   document.getElementById('labDuration').value=s.lab_duration||2;
@@ -121,9 +125,16 @@ async function editSubject(id){
 async function saveSubject(){
   const id=document.getElementById('subjectId').value;
   const isLab=parseInt(document.querySelector('input[name=subType]:checked').value);
-  const data={subject_name:document.getElementById('subName').value,subject_code:document.getElementById('subCode').value,
-    department:document.getElementById('subDept').value,periods_per_week:document.getElementById('subPeriods').value,
-    difficulty_level:document.getElementById('subDiff').value,is_lab:isLab,lab_duration:document.getElementById('labDuration').value};
+  const data={
+    subject_name: document.getElementById('subName').value,
+    abbreviation: document.getElementById('subAbbr').value,
+    subject_code: document.getElementById('subCode').value,
+    department: document.getElementById('subDept').value,
+    periods_per_week: document.getElementById('subPeriods').value,
+    difficulty_level: document.getElementById('subDiff').value,
+    is_lab: isLab,
+    lab_duration: document.getElementById('labDuration').value
+  };
   const r=await fetch(id?'/api/subjects/'+id:'/api/subjects',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
   const d=await r.json(); if(d.success){subjectModal.hide();location.reload();}
 }

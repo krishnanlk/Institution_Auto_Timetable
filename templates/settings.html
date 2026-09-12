@@ -1,36 +1,41 @@
 {% extends "base.html" %}
-{% block title %}Settings – EduSchedule Pro{% endblock %}
+{% block title %}Settings – SchedHub{% endblock %}
 {% block page_title %}Settings{% endblock %}
 {% block content %}
 <div class="settings-tabs" id="settingsTabs">
   <button class="stab active" onclick="showTab('time')"><i class="fas fa-clock"></i> Time Config</button>
   <button class="stab" onclick="showTab('slots')"><i class="fas fa-list-ol"></i> Period Slots</button>
-  <button class="stab" onclick="showTab('institution')"><i class="fas fa-university"></i> Institution</button>
+  <button class="stab" onclick="showTab('departments')"><i class="fas fa-sitemap"></i> Departments</button>
+  <button class="stab" onclick="showTab('institution')"><i class="fas fa-university"></i> Institution & Model</button>
+  {% if current_user.role == 'admin' %}
   <button class="stab" onclick="showTab('users')"><i class="fas fa-users-cog"></i> Users</button>
+  {% endif %}
 </div>
 
 <!-- TIME CONFIG -->
 <div class="stab-panel" id="tab-time">
   <div class="card-panel">
     <div class="panel-head"><h3><i class="fas fa-clock me-2 text-indigo"></i>Time Configuration</h3><span class="panel-sub">Set working days and periods per day</span></div>
-    <div class="row g-4">
-      <div class="col-md-4">
-        <label class="form-label fw-600">Periods Per Day</label>
-        <input type="number" class="ctrl" id="periodsPerDay" min="1" max="12" value="{{ cfg.periods_per_day or 6 }}"/>
-        <small class="text-muted">Lecture periods only (breaks not counted)</small>
-      </div>
-      <div class="col-md-8">
-        <label class="form-label fw-600">Working Days</label>
-        <div class="days-picker">
-          {% for d in days_list %}
-          <label class="day-chip {% if d in selected_days %}active{% endif %}" id="day-{{ d }}">
-            <input type="checkbox" value="{{ d }}" {% if d in selected_days %}checked{% endif %} onchange="toggleDay(this)"/>
-            {{ d }}
-          </label>
-          {% endfor %}
+    <div class="panel-body p-4">
+      <div class="row g-4">
+        <div class="col-md-4">
+          <label class="form-label fw-600">Periods Per Day</label>
+          <input type="number" class="ctrl" id="periodsPerDay" min="1" max="12" value="{{ cfg.periods_per_day or 6 }}"/>
+          <small class="text-muted">Lecture periods only (breaks not counted)</small>
         </div>
+        <div class="col-md-8">
+          <label class="form-label fw-600">Working Days</label>
+          <div class="days-picker">
+            {% for d in days_list %}
+            <label class="day-chip {% if d in selected_days %}active{% endif %}" id="day-{{ d }}">
+              <input type="checkbox" value="{{ d }}" {% if d in selected_days %}checked{% endif %} onchange="toggleDay(this)"/>
+              {{ d }}
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="col-12"><button class="btn-save" onclick="saveTimeConfig()"><i class="fas fa-save me-1"></i>Save Time Config</button></div>
       </div>
-      <div class="col-12"><button class="btn-save" onclick="saveTimeConfig()"><i class="fas fa-save me-1"></i>Save Time Config</button></div>
     </div>
   </div>
 </div>
@@ -42,67 +47,345 @@
       <h3><i class="fas fa-list-ol me-2 text-indigo"></i>Period & Break Schedule</h3>
       <span class="panel-sub">Define start/end time for each slot including breaks and lunch</span>
     </div>
-    <div id="slotsContainer">
-      {% for s in slots %}
-      <div class="slot-row" data-order="{{ s.slot_order }}">
-        <div class="slot-order">{{ s.slot_order }}</div>
-        <select class="ctrl slot-type" onchange="updateSlotType(this)">
-          <option value="period" {% if s.slot_type=='period' %}selected{% endif %}>Period</option>
-          <option value="break"  {% if s.slot_type=='break'  %}selected{% endif %}>Break</option>
-          <option value="lunch"  {% if s.slot_type=='lunch'  %}selected{% endif %}>Lunch</option>
-        </select>
-        <input type="text" class="ctrl slot-label" value="{{ s.label }}" placeholder="Label"/>
-        <input type="time" class="ctrl slot-start" value="{{ s.start_time }}"/>
-        <span class="slot-arrow">→</span>
-        <input type="time" class="ctrl slot-end" value="{{ s.end_time }}"/>
-        <button class="btn-icon-sm red" onclick="removeSlot(this)" title="Remove"><i class="fas fa-times"></i></button>
+    <div class="panel-body p-4">
+      <div id="slotsContainer">
+        {% for s in slots %}
+        <div class="slot-row" data-order="{{ s.slot_order }}">
+          <div class="slot-order">{{ s.slot_order }}</div>
+          <select class="ctrl slot-type" onchange="updateSlotType(this)">
+            <option value="period" {% if s.slot_type=='period' %}selected{% endif %}>Period</option>
+            <option value="break"  {% if s.slot_type=='break'  %}selected{% endif %}>Break</option>
+            <option value="lunch"  {% if s.slot_type=='lunch'  %}selected{% endif %}>Lunch</option>
+          </select>
+          <input type="text" class="ctrl slot-label" value="{{ s.label }}" placeholder="Label"/>
+          <input type="time" class="ctrl slot-start" value="{{ s.start_time }}"/>
+          <span class="slot-arrow">→</span>
+          <input type="time" class="ctrl slot-end" value="{{ s.end_time }}"/>
+          <button class="btn-icon-sm red" onclick="removeSlot(this)" title="Remove"><i class="fas fa-times"></i></button>
+        </div>
+        {% endfor %}
       </div>
-      {% endfor %}
-    </div>
-    <div class="mt-3 d-flex gap-2">
-      <button class="btn-outline" onclick="addSlot()"><i class="fas fa-plus me-1"></i>Add Slot</button>
-      <button class="btn-save" onclick="saveSlots()"><i class="fas fa-save me-1"></i>Save Schedule</button>
-    </div>
-    <div class="mt-3">
-      <div class="info-note"><i class="fas fa-info-circle"></i> Break/Lunch slots are displayed in the timetable but not counted as teaching periods.</div>
+      <div class="mt-3 d-flex gap-2">
+        <button class="btn-outline" onclick="addSlot()"><i class="fas fa-plus me-1"></i>Add Slot</button>
+        <button class="btn-save" onclick="saveSlots()"><i class="fas fa-save me-1"></i>Save Schedule</button>
+      </div>
+      <div class="mt-3">
+        <div class="info-note"><i class="fas fa-info-circle"></i> Break/Lunch slots are displayed in the timetable but not counted as teaching periods.</div>
+      </div>
     </div>
   </div>
 </div>
 
 <!-- INSTITUTION -->
-<div class="stab-panel" id="tab-institution" style="display:none">
+<!-- DEPARTMENTS -->
+<div class="stab-panel" id="tab-departments" style="display:none">
   <div class="card-panel">
-    <div class="panel-head"><h3><i class="fas fa-university me-2 text-indigo"></i>Institution Details</h3></div>
-    <div class="row g-3">
-      <div class="col-md-8"><label class="form-label fw-600">Institution Name</label><input type="text" class="ctrl" id="instName" value="{{ inst.name or '' }}"/></div>
-      <div class="col-md-2"><label class="form-label fw-600">Logo Emoji</label><input type="text" class="ctrl" id="instLogo" value="{{ inst.logo_text or '🏫' }}" maxlength="4"/></div>
-      <div class="col-md-2"><label class="form-label fw-600">Code (read-only)</label><input type="text" class="ctrl" value="{{ inst.code or '' }}" readonly style="background:var(--bg-main)"/></div>
-      <div class="col-md-6"><label class="form-label fw-600">Email</label><input type="email" class="ctrl" id="instEmail" value="{{ inst.email or '' }}"/></div>
-      <div class="col-md-6"><label class="form-label fw-600">Phone</label><input type="text" class="ctrl" id="instPhone" value="{{ inst.phone or '' }}"/></div>
-      <div class="col-12"><label class="form-label fw-600">Address</label><input type="text" class="ctrl" id="instAddress" value="{{ inst.address or '' }}"/></div>
-      <div class="col-12"><button class="btn-save" onclick="saveInstitution()"><i class="fas fa-save me-1"></i>Save Institution</button></div>
+    <div class="panel-head d-flex justify-content-between align-items-center">
+      <div>
+        <h3><i class="fas fa-sitemap me-2 text-indigo"></i>Department Management</h3>
+        <span class="panel-sub">Configure Core Disciplines, Basic Sciences & Humanities, and Allied Streams</span>
+      </div>
+      {% if current_user.role in ('admin', 'creator') %}
+      <button class="btn-primary-sm" onclick="openAddDept()"><i class="fas fa-plus me-1"></i>Add Department</button>
+      {% endif %}
+    </div>
+    <div class="panel-body p-4">
+      <div class="row g-3 mb-4">
+        <div class="col-md-3 col-sm-6">
+          <div class="p-3 rounded-3" style="background:rgba(99,102,241,0.06); border:1px solid rgba(99,102,241,0.15);">
+            <div class="d-flex align-items-center gap-2 mb-1">
+              <span class="badge" style="background:#4f46e5;color:#fff;font-size:11px;">Basic Sciences</span>
+              <span class="small text-muted ms-auto">Shared Faculty</span>
+            </div>
+            <div class="fw-bold fs-5 text-dark">{{ departments|selectattr("category", "equalto", "basic_science")|list|length }}</div>
+            <small class="text-muted" style="font-size:11.5px;">Maths, Physics, Chem, Engg Foundation</small>
+          </div>
+        </div>
+        <div class="col-md-3 col-sm-6">
+          <div class="p-3 rounded-3" style="background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.15);">
+            <div class="d-flex align-items-center gap-2 mb-1">
+              <span class="badge" style="background:#059669;color:#fff;font-size:11px;">Core Engineering</span>
+              <span class="small text-muted ms-auto">Major Depts</span>
+            </div>
+            <div class="fw-bold fs-5 text-dark">{{ departments|selectattr("category", "equalto", "core")|list|length }}</div>
+            <small class="text-muted" style="font-size:11.5px;">CSE, ECE, MECH, CIVIL, IT, AIDS</small>
+          </div>
+        </div>
+        <div class="col-md-3 col-sm-6">
+          <div class="p-3 rounded-3" style="background:rgba(139,92,246,0.06); border:1px solid rgba(139,92,246,0.15);">
+            <div class="d-flex align-items-center gap-2 mb-1">
+              <span class="badge" style="background:#7c3aed;color:#fff;font-size:11px;">General Stream</span>
+              <span class="small text-muted ms-auto">Academic</span>
+            </div>
+            <div class="fw-bold fs-5 text-dark">{{ departments|selectattr("category", "equalto", "general")|list|length }}</div>
+            <small class="text-muted" style="font-size:11.5px;">Language, Social, Common Courses</small>
+          </div>
+        </div>
+        <div class="col-md-3 col-sm-6">
+          <div class="p-3 rounded-3" style="background:rgba(245,158,11,0.06); border:1px solid rgba(245,158,11,0.15);">
+            <div class="d-flex align-items-center gap-2 mb-1">
+              <span class="badge" style="background:#d97706;color:#fff;font-size:11px;">Allied & Labs</span>
+              <span class="small text-muted ms-auto">Practical</span>
+            </div>
+            <div class="fw-bold fs-5 text-dark">{{ departments|selectattr("category", "equalto", "allied")|list|length }}</div>
+            <small class="text-muted" style="font-size:11.5px;">PE, Arts, Workshop, Practical streams</small>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Department Name</th>
+              <th>Category</th>
+              <th>Created</th>
+              {% if current_user.role in ('admin', 'creator') %}<th>Actions</th>{% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for d in departments %}
+            <tr>
+              <td><span class="badge bg-dark-subtle text-dark border px-2 py-1" style="font-family:monospace;font-size:12px;">{{ d.code }}</span></td>
+              <td><strong>{{ d.name }}</strong></td>
+              <td>
+                {% if d.category == 'basic_science' %}
+                  <span class="badge" style="background:rgba(79,70,229,0.12); color:#4338ca; border:1px solid rgba(79,70,229,0.25);">
+                    <i class="fas fa-atom me-1"></i>Basic Sciences & Humanities
+                  </span>
+                {% elif d.category == 'core' %}
+                  <span class="badge" style="background:rgba(16,185,129,0.12); color:#065f46; border:1px solid rgba(16,185,129,0.25);">
+                    <i class="fas fa-microchip me-1"></i>Core Engineering / Discipline
+                  </span>
+                {% elif d.category == 'allied' %}
+                  <span class="badge" style="background:rgba(245,158,11,0.12); color:#92400e; border:1px solid rgba(245,158,11,0.25);">
+                    <i class="fas fa-running me-1"></i>Allied & Physical
+                  </span>
+                {% else %}
+                  <span class="badge" style="background:rgba(107,114,128,0.12); color:#374151; border:1px solid rgba(107,114,128,0.25);">
+                    <i class="fas fa-book me-1"></i>General Academic
+                  </span>
+                {% endif %}
+              </td>
+              <td class="text-muted small">{{ d.created_at[:10] if d.created_at else '—' }}</td>
+              {% if current_user.role in ('admin', 'creator') %}
+              <td>
+                <button class="btn-icon-sm red" data-id="{{ d.id }}" data-name="{{ d.name }}" onclick="deleteDept(parseInt(this.dataset.id), this.dataset.name)" title="Delete Department">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </td>
+              {% endif %}
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="5" class="text-center py-4 text-muted">No departments configured yet. Click "Add Department" or apply a preset below.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>
 
+<!-- INSTITUTION & MODEL -->
+<div class="stab-panel" id="tab-institution" style="display:none">
+  <!-- PRODUCTION MODEL PRESET SELECTOR -->
+  <div class="card-panel mb-4">
+    <div class="panel-head">
+      <h3><i class="fas fa-layer-group me-2 text-indigo"></i>Real-Time Production Models (Colleges & Schools)</h3>
+      <span class="panel-sub">Deploy pre-configured real-world institutional matrices engineered for 0-conflict autonomous generation</span>
+    </div>
+    <div class="panel-body p-4">
+      <div class="row g-4">
+        <!-- College Model Card -->
+        <div class="col-md-6">
+          <div class="p-3 rounded-3 h-100 d-flex flex-column justify-content-between inst-card {{ 'inst-college-active' if inst_type == 'college' else '' }}" style="background:var(--bg-main); position:relative;">
+            {% if inst_type == 'college' %}
+            <span class="badge bg-primary position-absolute top-0 end-0 m-3 px-2 py-1"><i class="fas fa-check-circle me-1"></i>Active Mode</span>
+            {% endif %}
+            <div>
+              <div class="d-flex align-items-center gap-2 mb-2">
+                <span style="font-size:24px;">🏛️</span>
+                <div>
+                  <h5 class="mb-0 fw-bold">Engineering College Model</h5>
+                  <small class="text-muted">Higher Education / Autonomous / Affiliated Colleges</small>
+                </div>
+              </div>
+              <p class="text-muted small mb-3">
+                Full multi-department matrix with <strong>Basic Sciences & Humanities (S&H)</strong> and <strong>Core Engineering (CSE, ECE, MECH)</strong>. Includes shared professors (Maths, Physics, English), consecutive 2-period lab blocks, and zero faculty double-booking.
+              </p>
+              <div class="d-flex flex-wrap gap-1 mb-3">
+                <span class="badge bg-light text-dark border">7 Departments</span>
+                <span class="badge bg-light text-dark border">Shared S&H Faculty</span>
+                <span class="badge bg-light text-dark border">5 Class Sections</span>
+                <span class="badge bg-light text-dark border">Hands-on Labs</span>
+                <span class="badge bg-success-subtle text-success border border-success-subtle"><i class="fas fa-shield-alt me-1"></i>0 Clashes</span>
+              </div>
+            </div>
+            {% if current_user.role in ('admin', 'creator') %}
+            <button class="btn btn-primary w-100 py-2 fw-semibold" onclick="loadPresetModel('college')" id="btnLoadCollege">
+              <i class="fas fa-university me-1"></i> Load College Model & Auto-Schedule
+            </button>
+            {% else %}
+            <div class="alert alert-secondary py-1 text-center small mb-0">Admin/Creator access required to switch model preset</div>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- School Model Card -->
+        <div class="col-md-6">
+          <div class="p-3 rounded-3 h-100 d-flex flex-column justify-content-between inst-card {{ 'inst-school-active' if inst_type == 'school' else '' }}" style="background:var(--bg-main); position:relative;">
+            {% if inst_type == 'school' %}
+            <span class="badge bg-success position-absolute top-0 end-0 m-3 px-2 py-1"><i class="fas fa-check-circle me-1"></i>Active Mode</span>
+            {% endif %}
+            <div>
+              <div class="d-flex align-items-center gap-2 mb-2">
+                <span style="font-size:24px;">🏫</span>
+                <div>
+                  <h5 class="mb-0 fw-bold">K-12 High School Model</h5>
+                  <small class="text-muted">Primary, Middle & High School (Grades 6–10)</small>
+                </div>
+              </div>
+              <p class="text-muted small mb-3">
+                Streamlined K-12 academic architecture featuring <strong>Languages, Mathematics, Science, Social Studies, Computer Coding, and Physical Education</strong>. Teachers rotate across grade sections with lab practicals and sports periods.
+              </p>
+              <div class="d-flex flex-wrap gap-1 mb-3">
+                <span class="badge bg-light text-dark border">6 Subject Streams</span>
+                <span class="badge bg-light text-dark border">Grades 6-A to 10-A</span>
+                <span class="badge bg-light text-dark border">Specialist Teachers</span>
+                <span class="badge bg-light text-dark border">Science & PE Labs</span>
+                <span class="badge bg-success-subtle text-success border border-success-subtle"><i class="fas fa-shield-alt me-1"></i>0 Clashes</span>
+              </div>
+            </div>
+            {% if current_user.role in ('admin', 'creator') %}
+            <button class="btn btn-success w-100 py-2 fw-semibold" onclick="loadPresetModel('school')" id="btnLoadSchool">
+              <i class="fas fa-graduation-cap me-1"></i> Load School Model & Auto-Schedule
+            </button>
+            {% else %}
+            <div class="alert alert-secondary py-1 text-center small mb-0">Admin/Creator access required to switch model preset</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card-panel">
+    <div class="panel-head"><h3><i class="fas fa-university me-2 text-indigo"></i>Institution Profile & Branding</h3></div>
+    <div class="panel-body p-4">
+      {% if current_user.role == 'creator' %}
+      <div class="alert alert-info d-flex align-items-center mb-4 py-2 px-3" style="border-radius:10px; font-size:13px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.25); color:#3730a3;">
+        <i class="fas fa-eye me-2 fs-5"></i>
+        <div>
+          <strong>Creator Role (View-Only):</strong> You have viewer access to college information and logo. Timetable creation, faculty scheduling, and slot configurations are fully accessible.
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="row g-3">
+        <div class="col-md-5">
+          <label class="form-label fw-600">Institution / College Name</label>
+          <input type="text" class="ctrl" id="instName" value="{{ inst.name or '' }}" {% if current_user.role != 'admin' %}readonly style="background:var(--bg-main); cursor:not-allowed;"{% endif %}/>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label fw-600">Institution Classification</label>
+          <select class="ctrl" id="instType" {% if current_user.role != 'admin' %}disabled style="background:var(--bg-main); cursor:not-allowed;"{% endif %}>
+            <option value="college" {% if inst_type == 'college' %}selected{% endif %}>College / University (Semester-based)</option>
+            <option value="school" {% if inst_type == 'school' %}selected{% endif %}>K-12 School (Grade-based)</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-600">College Logo</label>
+          <div class="d-flex align-items-center gap-3 p-2 rounded" style="background:var(--bg-main); border: 1px solid var(--border);">
+            <div id="settingsLogoPreview" style="width: 44px; height: 44px; background: #fff; border-radius: 8px; border: 1px solid #cbd5e1; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;">
+              {% if inst.logo_url %}
+                <img id="settingsLogoImg" src="{{ inst.logo_url }}" alt="Logo" style="max-width: 100%; max-height: 100%; object-fit: contain;"/>
+              {% else %}
+                <span id="settingsLogoPlaceholder" style="font-size: 22px;">{{ inst.logo_text or '🎓' }}</span>
+                <img id="settingsLogoImg" src="" alt="Logo" style="max-width: 100%; max-height: 100%; object-fit: contain; display:none;"/>
+              {% endif %}
+            </div>
+            <div class="flex-grow-1">
+              {% if current_user.role == 'admin' %}
+              <input type="file" id="settingsLogoFileInput" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="display:none;" onchange="uploadSettingsLogo(this.files)"/>
+              <button type="button" class="btn btn-sm btn-outline-primary py-1 px-2" style="font-size:11.5px;font-weight:600;" onclick="document.getElementById('settingsLogoFileInput').click()">
+                <i class="fas fa-folder-open me-1"></i> Explore Folders & Upload
+              </button>
+              {% if inst.logo_url %}
+              <button type="button" class="btn btn-sm btn-outline-danger py-1 px-2 ms-1" style="font-size:11px;" onclick="removeSettingsLogo()">
+                <i class="fas fa-trash"></i>
+              </button>
+              {% endif %}
+              <div class="text-muted small mt-1" style="font-size:10px;">PNG, SVG, JPG, WEBP</div>
+              {% else %}
+              <span class="badge bg-secondary-subtle text-secondary border px-2 py-1" style="font-size:11.5px;"><i class="fas fa-lock me-1"></i> Admin Managed</span>
+              <div class="text-muted small mt-1" style="font-size:11px;">View-only access for Creator</div>
+              {% endif %}
+            </div>
+          </div>
+          <input type="hidden" id="instLogoUrl" value="{{ inst.logo_url or '' }}"/>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label fw-600">Logo Emoji</label>
+          <input type="text" class="ctrl" id="instLogo" value="{{ inst.logo_text or '🎓' }}" maxlength="4" {% if current_user.role != 'admin' %}readonly style="background:var(--bg-main); cursor:not-allowed;"{% endif %}/>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label fw-600">Code (read-only)</label>
+          <input type="text" class="ctrl" value="{{ inst.code or '' }}" readonly style="background:var(--bg-main); cursor:not-allowed;"/>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-600">Email</label>
+          <input type="email" class="ctrl" id="instEmail" value="{{ inst.email or '' }}" {% if current_user.role != 'admin' %}readonly style="background:var(--bg-main); cursor:not-allowed;"{% endif %}/>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label fw-600">Phone</label>
+          <input type="text" class="ctrl" id="instPhone" value="{{ inst.phone or '' }}" {% if current_user.role != 'admin' %}readonly style="background:var(--bg-main); cursor:not-allowed;"{% endif %}/>
+        </div>
+        <div class="col-12">
+          <label class="form-label fw-600">Address / City / Pincode</label>
+          <input type="text" class="ctrl" id="instAddress" value="{{ inst.address or '' }}" {% if current_user.role != 'admin' %}readonly style="background:var(--bg-main); cursor:not-allowed;"{% endif %}/>
+        </div>
+        {% if current_user.role == 'admin' %}
+        <div class="col-12 pt-2"><button class="btn-save" onclick="saveInstitution()"><i class="fas fa-save me-1"></i>Save Institution</button></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if current_user.role == 'admin' %}
 <!-- USERS -->
 <div class="stab-panel" id="tab-users" style="display:none">
   <div class="card-panel">
     <div class="panel-head"><h3><i class="fas fa-users-cog me-2 text-indigo"></i>User Management</h3><button class="btn-primary-sm" onclick="openAddUser()"><i class="fas fa-plus me-1"></i>Add User</button></div>
-    <table class="data-table mt-3">
-      <thead><tr><th>Username</th><th>Email</th><th>Role</th><th>Created</th><th>Actions</th></tr></thead>
-      <tbody>
-      {% for u in users %}
-      <tr>
-        <td><strong>{{ u.username }}</strong></td>
-        <td>{{ u.email or '—' }}</td>
-        <td><span class="badge {% if u.role=='admin' %}bg-primary{% else %}bg-secondary{% endif %}">{{ u.role }}</span></td>
-        <td>{{ u.created_at[:10] }}</td>
-        <td><button class="btn-icon-sm red" onclick="deleteUser({{ u.id }},'{{ u.username }}')"><i class="fas fa-trash"></i></button></td>
-      </tr>
-      {% endfor %}
-      </tbody>
-    </table>
+    <div class="panel-body p-4">
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead><tr><th>Username</th><th>Email</th><th>Role</th><th>Created</th><th>Actions</th></tr></thead>
+          <tbody>
+          {% for u in users %}
+          <tr>
+            <td><strong>{{ u.username }}</strong></td>
+            <td>{{ u.email or '—' }}</td>
+            <td>
+              {% if u.role == 'admin' %}
+                <span class="badge bg-primary"><i class="fas fa-shield-alt me-1"></i>admin</span>
+              {% elif u.role == 'creator' %}
+                <span class="badge" style="background:#8b5cf6;color:#fff;"><i class="fas fa-magic me-1"></i>creator</span>
+              {% else %}
+                <span class="badge bg-secondary"><i class="fas fa-eye me-1"></i>viewer</span>
+              {% endif %}
+            </td>
+            <td>{{ u.created_at[:10] }}</td>
+            <td><button class="btn-icon-sm red" data-id="{{ u.id }}" data-uname="{{ u.username }}" onclick="deleteUser(parseInt(this.dataset.id), this.dataset.uname)"><i class="fas fa-trash"></i></button></td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -113,7 +396,14 @@
     <div class="modal-body">
       <div class="row g-3">
         <div class="col-md-6"><label class="form-label fw-600">Username *</label><input type="text" class="ctrl" id="newUsername"/></div>
-        <div class="col-md-6"><label class="form-label fw-600">Role</label><select class="ctrl" id="newRole"><option value="admin">Admin</option><option value="viewer">Viewer</option></select></div>
+        <div class="col-md-6">
+          <label class="form-label fw-600">Role</label>
+          <select class="ctrl" id="newRole">
+            <option value="admin">Admin (Full Access & User Management)</option>
+            <option value="creator">Creator (Timetable & Staff Access - View Only Institution)</option>
+            <option value="viewer">Viewer (Read Only)</option>
+          </select>
+        </div>
         <div class="col-md-6"><label class="form-label fw-600">Email</label><input type="email" class="ctrl" id="newUserEmail"/></div>
         <div class="col-md-6"><label class="form-label fw-600">Password *</label><input type="password" class="ctrl" id="newUserPw" minlength="6"/></div>
       </div>
@@ -121,16 +411,46 @@
     <div class="cm-foot"><button class="btn-cancel" data-bs-dismiss="modal">Cancel</button><button class="btn-save" onclick="saveUser()">Add User</button></div>
   </div></div>
 </div>
+{% endif %}
+
+<!-- Add Department Modal -->
+<div class="modal fade" id="addDeptModal" tabindex="-1">
+  <div class="modal-dialog"><div class="modal-content cm">
+    <div class="cm-head"><h5><i class="fas fa-sitemap me-2 text-indigo"></i>Add Department</h5><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+      <div class="row g-3">
+        <div class="col-md-4"><label class="form-label fw-600">Code *</label><input type="text" class="ctrl" id="newDeptCode" placeholder="e.g. S&H, CSE" maxlength="10"/></div>
+        <div class="col-md-8"><label class="form-label fw-600">Department Name *</label><input type="text" class="ctrl" id="newDeptName" placeholder="Computer Science & Engineering"/></div>
+        <div class="col-12">
+          <label class="form-label fw-600">Department Classification</label>
+          <select class="ctrl" id="newDeptCat">
+            <option value="core">Core Engineering / Academic (CSE, ECE, MECH, CIVIL, IT, AIDS)</option>
+            <option value="basic_science">Basic Sciences & Humanities (S&H: Maths, Physics, Chemistry, English)</option>
+            <option value="general">General Academic / Foundational Courses</option>
+            <option value="allied">Allied & Physical / Practical Streams</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="cm-foot"><button class="btn-cancel" data-bs-dismiss="modal">Cancel</button><button class="btn-save" onclick="saveDept()"><i class="fas fa-plus me-1"></i>Create Department</button></div>
+  </div></div>
+</div>
 {% endblock %}
 {% block scripts %}
 <script>
-const addUserModal = new bootstrap.Modal(document.getElementById('addUserModal'));
+const addUserModalEl = document.getElementById('addUserModal');
+const addUserModal = addUserModalEl ? new bootstrap.Modal(addUserModalEl) : null;
+const addDeptModalEl = document.getElementById('addDeptModal');
+const addDeptModal = addDeptModalEl ? new bootstrap.Modal(addDeptModalEl) : null;
 let slotCount = document.querySelectorAll('.slot-row').length;
 
 function showTab(t){
-  document.querySelectorAll('.stab').forEach((b,i)=>b.classList.toggle('active',['time','slots','institution','users'][i]===t));
-  document.querySelectorAll('.stab-panel').forEach(p=>p.style.display='none');
-  document.getElementById('tab-'+t).style.display='block';
+  document.querySelectorAll('.stab').forEach(b => {
+    b.classList.toggle('active', b.getAttribute('onclick').includes("'" + t + "'"));
+  });
+  document.querySelectorAll('.stab-panel').forEach(p => p.style.display = 'none');
+  const target = document.getElementById('tab-' + t);
+  if (target) target.style.display = 'block';
 }
 
 function toggleDay(cb){
@@ -185,16 +505,65 @@ async function saveSlots(){
   if(d.success) showToast('Period schedule saved!');
 }
 
-async function saveInstitution(){
-  const data={name:document.getElementById('instName').value,email:document.getElementById('instEmail').value,
-    phone:document.getElementById('instPhone').value,address:document.getElementById('instAddress').value,
-    logo_text:document.getElementById('instLogo').value};
-  const r=await fetch('/api/settings/institution',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-  const d=await r.json();
-  if(d.success) showToast('Institution details saved!');
+async function uploadSettingsLogo(files){
+  if (!files || files.length === 0) return;
+  const file = files[0];
+  const formData = new FormData();
+  formData.append('logo_file', file);
+  try {
+    const res = await fetch('/api/institution/upload-logo', { method: 'POST', body: formData });
+    const d = await res.json();
+    if (d.success) {
+      document.getElementById('instLogoUrl').value = d.logo_url;
+      const img = document.getElementById('settingsLogoImg');
+      const ph = document.getElementById('settingsLogoPlaceholder');
+      if (img) { img.src = d.logo_url; img.style.display = 'block'; }
+      if (ph) { ph.style.display = 'none'; }
+      showToast('College logo uploaded successfully!');
+      setTimeout(() => location.reload(), 800);
+    } else {
+      showToast(d.error || 'Failed to upload logo', 'danger');
+    }
+  } catch (e) {
+    showToast('Error uploading logo', 'danger');
+  }
 }
 
-function openAddUser(){ addUserModal.show(); }
+async function removeSettingsLogo(){
+  if (!confirm('Remove college logo?')) return;
+  try {
+    const res = await fetch('/api/institution/remove-logo', { method: 'POST' });
+    const d = await res.json();
+    if (d.success) {
+      document.getElementById('instLogoUrl').value = '';
+      showToast('Logo removed');
+      setTimeout(() => location.reload(), 600);
+    }
+  } catch (e) {
+    showToast('Error removing logo', 'danger');
+  }
+}
+
+async function saveInstitution(){
+  const instTypeEl = document.getElementById('instType');
+  const data={
+    name: document.getElementById('instName').value,
+    institution_type: instTypeEl ? instTypeEl.value : 'college',
+    logo_url: document.getElementById('instLogoUrl').value,
+    email: document.getElementById('instEmail').value,
+    phone: document.getElementById('instPhone').value,
+    address: document.getElementById('instAddress').value,
+    logo_text: document.getElementById('instLogo').value
+  };
+  const r=await fetch('/api/settings/institution',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  const d=await r.json();
+  if(d.success) {
+    showToast('Institution profile saved!');
+    setTimeout(() => location.reload(), 800);
+  }
+}
+
+function openAddUser(){ if (addUserModal) addUserModal.show(); }
 
 async function saveUser(){
   const data={username:document.getElementById('newUsername').value,email:document.getElementById('newUserEmail').value,
@@ -212,6 +581,65 @@ async function deleteUser(id,name){
   const d=await r.json();
   if(d.success) location.reload();
   else showToast(d.error||'Cannot delete','danger');
+}
+
+function openAddDept(){ if (addDeptModal) addDeptModal.show(); }
+
+async function saveDept(){
+  const code = document.getElementById('newDeptCode').value.trim();
+  const name = document.getElementById('newDeptName').value.trim();
+  const category = document.getElementById('newDeptCat').value;
+  if (!code || !name) { showToast('Department code and name are required', 'warning'); return; }
+  const res = await fetch('/api/departments', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ code, name, category })
+  });
+  const d = await res.json();
+  if (d.success) {
+    if (addDeptModal) addDeptModal.hide();
+    showToast(`Department ${code} created!`);
+    setTimeout(() => location.reload(), 600);
+  } else {
+    showToast(d.error || 'Failed to create department', 'danger');
+  }
+}
+
+async function deleteDept(id, name){
+  if (!confirm(`Delete department "${name}"?`)) return;
+  const res = await fetch(`/api/departments/${id}`, { method: 'DELETE' });
+  const d = await res.json();
+  if (d.success) {
+    showToast('Department removed');
+    setTimeout(() => location.reload(), 600);
+  } else {
+    showToast(d.error || 'Failed to delete', 'danger');
+  }
+}
+
+async function loadPresetModel(modelType){
+  const btn = document.getElementById(modelType === 'school' ? 'btnLoadSchool' : 'btnLoadCollege');
+  const oldText = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Deploying & Scheduling…'; }
+
+  try {
+    const res = await fetch('/api/institution/preset', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ model_type: modelType })
+    });
+    const d = await res.json();
+    if (d.success) {
+      showToast(d.message || 'Model loaded with 0 conflicts!');
+      setTimeout(() => { window.location.href = '/timetable'; }, 700);
+    } else {
+      showToast(d.error || 'Error loading model', 'danger');
+      if (btn) { btn.disabled = false; btn.innerHTML = oldText; }
+    }
+  } catch (e) {
+    showToast('Network error while deploying model', 'danger');
+    if (btn) { btn.disabled = false; btn.innerHTML = oldText; }
+  }
 }
 </script>
 {% endblock %}

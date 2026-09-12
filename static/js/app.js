@@ -1,4 +1,4 @@
-// EduSchedule Pro v2 — Global JS
+// SchedHub v3 — Global JS
 
 function toggleSidebar(){
   document.getElementById('sidebar').classList.toggle('open');

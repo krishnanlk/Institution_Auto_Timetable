@@ -1,32 +1,28 @@
 {% extends "base.html" %}
-{% block title %}Timetable – EduSchedule Pro{% endblock %}
-{% block page_title %}Timetable{% endblock %}
+{% block title %}Timetable – SchedHub{% endblock %}
+{% block page_title %}
+  Timetable
+  {% if active_timetable %}
+    <span class="tt-status-pill {% if active_timetable.conflicts > 0 %}pill-warn{% else %}pill-ok{% endif %}">
+      {% if active_timetable.conflicts > 0 %}
+        <i class="fas fa-exclamation-triangle me-1"></i>{{ active_timetable.conflicts }} conflict(s)
+      {% else %}
+        <i class="fas fa-check-circle me-1"></i>No conflicts
+      {% endif %}
+    </span>
+  {% endif %}
+{% endblock %}
 {% block topbar_actions %}
-<button class="btn-outline-sm me-2" onclick="validateTT()"><i class="fas fa-check-circle me-1"></i>Validate</button>
-<button class="btn-primary-sm" onclick="openGenModal()"><i class="fas fa-magic me-1"></i>Generate</button>
+<button class="btn-outline-sm me-2" onclick="validateTT()" id="validateBtn">
+  <i class="fas fa-check-circle me-1"></i>Validate
+</button>
+<button class="btn-primary-sm" onclick="openGenModal()">
+  <i class="fas fa-magic me-1"></i>Generate
+</button>
 {% endblock %}
 {% block content %}
 
-{% if active_timetable %}
-<div class="banner banner-success mb-3">
-  <i class="fas fa-check-circle"></i>
-  Active: <strong>{{ active_timetable.name }}</strong> — {{ active_timetable.generated_at }}
-  {% if active_timetable.conflicts > 0 %}
-    <span class="badge bg-danger ms-2">{{ active_timetable.conflicts }} conflict(s)</span>
-  {% else %}
-    <span class="badge bg-success ms-2">No conflicts</span>
-  {% endif %}
-  {% if current_user.role == 'admin' %}
-  <button class="btn-outline-danger ms-auto" onclick="deleteTT()"><i class="fas fa-trash me-1"></i>Delete</button>
-  {% endif %}
-</div>
-{% else %}
-<div class="banner banner-warn"><i class="fas fa-exclamation-triangle"></i> No timetable yet. Click <strong>Generate</strong> to create one.</div>
-{% endif %}
-
-<div id="validationPanel"></div>
-
-<!-- Info strip -->
+<!-- Period schedule strip -->
 {% if period_slots %}
 <div class="schedule-strip mb-3">
   <span class="ss-label"><i class="fas fa-clock me-1"></i>Daily Schedule</span>
@@ -43,42 +39,123 @@
 </div>
 {% endif %}
 
-<div class="view-toggle">
-  <button class="vtab active" id="vCls" onclick="switchView('class')"><i class="fas fa-door-open me-1"></i>Class View</button>
-  <button class="vtab" id="vStf" onclick="switchView('staff')"><i class="fas fa-user-tie me-1"></i>Staff View</button>
+<!-- Validation panel -->
+<div id="validationPanel"></div>
+
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+  <!-- View toggle -->
+  <div class="view-toggle mb-0">
+    <button class="vtab active" id="vCls" onclick="switchView('class')">
+      <i class="fas fa-door-open me-1"></i>Class Schedule
+    </button>
+    <button class="vtab" id="vStf" onclick="switchView('staff')">
+      <i class="fas fa-user-tie me-1"></i>Faculty / Staff Schedule
+    </button>
+  </div>
+
+  <!-- Real-Time Institutional Model Indicator -->
+  <div class="d-flex align-items-center gap-2">
+    <span class="badge" style="font-size:12px; padding:6px 12px; background:rgba(99,102,241,0.1); color:#4338ca; border:1px solid rgba(99,102,241,0.25);">
+      {% if inst_type == 'school' %}
+        <i class="fas fa-graduation-cap me-1"></i>K-12 School Model
+      {% else %}
+        <i class="fas fa-university me-1"></i>Engineering & S&H College Model
+      {% endif %}
+    </span>
+    {% if active_timetable and active_timetable.conflicts == 0 %}
+      <span class="badge" style="font-size:12px; padding:6px 12px; background:rgba(16,185,129,0.1); color:#065f46; border:1px solid rgba(16,185,129,0.25);">
+        <i class="fas fa-shield-alt me-1"></i>Zero Clashes Guaranteed
+      </span>
+    {% endif %}
+  </div>
 </div>
 
+<!-- Department Filter Pills Bar -->
+{% if departments %}
+<div class="dept-filter-bar mb-3 p-2 rounded-3 d-flex align-items-center gap-2 flex-wrap" style="background:var(--bg-main); border:1px solid var(--border);">
+  <span class="text-muted small fw-600 me-1" style="font-size:12px;"><i class="fas fa-sitemap me-1 text-indigo"></i>Department:</span>
+  <button class="dept-pill active" onclick="filterByDept('all', this)">All Departments</button>
+  {% for d in departments %}
+    <button class="dept-pill" onclick="filterByDept('{{ d.code }}', this)">
+      {{ d.code }}
+      <small style="opacity:0.75; font-size:10px;">({{ d.name }})</small>
+    </button>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- ═══════════════════════════ CLASS VIEW ═══════════════════════════════════ -->
 <div id="classView">
   <div class="sel-bar">
     <label class="sel-lbl">Class:</label>
     <select class="ctrl sel-ctrl" id="classSelect" onchange="loadClassTT()">
       <option value="">— Select a class —</option>
-      {% for c in classes %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+      {% for c in classes %}<option value="{{ c.id }}" data-dept="{{ c.department }}">{{ c.name }} ({{ c.department }})</option>{% endfor %}
     </select>
-    <div id="exportBtns" style="display:none;gap:8px">
+    <div id="exportBtns" style="display:none;gap:8px;display:flex">
       <button class="btn-outline-sm" onclick="exportCSV()"><i class="fas fa-file-csv me-1"></i>CSV</button>
       <button class="btn-outline-sm" onclick="exportPDF()"><i class="fas fa-file-pdf me-1"></i>PDF</button>
+      <button class="btn-outline-sm" onclick="openOfficialPrint()" style="background:#eef2ff;color:#4338ca;border-color:#c7d2fe;font-weight:600"><i class="fas fa-file-invoice me-1"></i>Official Format</button>
+      <button class="btn-primary-sm" onclick="downloadImageDirect()" style="background:#10b981;border:none;font-weight:600"><i class="fas fa-image me-1"></i>Download Image</button>
     </div>
+    {% if active_timetable and current_user.role in ('admin', 'creator') %}
+    <button class="btn-outline-danger ms-auto" onclick="deleteTT()" style="margin-left:auto">
+      <i class="fas fa-trash me-1"></i>Delete Timetable
+    </button>
+    {% endif %}
   </div>
   <div id="classTTDiv"></div>
 </div>
 
+<!-- ═══════════════════════════ STAFF VIEW ═══════════════════════════════════ -->
 <div id="staffView" style="display:none">
   <div class="sel-bar">
-    <label class="sel-lbl">Staff:</label>
+    <label class="sel-lbl">Staff Member:</label>
     <select class="ctrl sel-ctrl" id="staffSelect" onchange="loadStaffTT()">
       <option value="">— Select a staff member —</option>
-      {% for s in staff_list %}<option value="{{ s.id }}">{{ s.name }} ({{ s.department }})</option>{% endfor %}
+      {% for s in staff_list %}<option value="{{ s.id }}" data-dept="{{ s.department }}">{{ s.name }} ({{ s.department }})</option>{% endfor %}
     </select>
   </div>
   <div id="staffTTDiv"></div>
 </div>
 
-<!-- GENERATE MODAL -->
+<!-- ═══════════════════════════ CONFLICT PANEL ═══════════════════════════════ -->
+{% if conflicts %}
+<div class="conflict-panel mt-3" id="conflictPanel">
+  <div class="conflict-panel-header">
+    <i class="fas fa-exclamation-triangle me-2"></i>
+    <strong>{{ conflicts|length }} Conflict(s) Detected</strong>
+    <button class="conflict-toggle-btn" onclick="toggleConflicts()">
+      <i class="fas fa-chevron-down" id="conflictChevron"></i>
+    </button>
+  </div>
+  <div id="conflictList" class="conflict-list">
+    {% for c in conflicts %}
+    <div class="conflict-item">
+      <div class="conflict-meta">
+        <span class="ci-class">{{ c.class_name }}</span>
+        <span class="ci-subject">{{ c.subject_name }}</span>
+        {% if c.day and c.day != '—' %}
+          <span class="ci-slot">{{ c.day }}, Period {{ c.period }}</span>
+        {% endif %}
+      </div>
+      <div class="ci-reason"><i class="fas fa-info-circle me-1"></i>{{ c.reason }}</div>
+      {% if c.suggested_action %}
+      <div class="ci-action"><i class="fas fa-lightbulb me-1"></i>{{ c.suggested_action }}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- ═══════════════════════════ GENERATE MODAL ═══════════════════════════════ -->
 <div class="modal fade" id="genModal" tabindex="-1">
   <div class="modal-dialog"><div class="modal-content cm">
-    <div class="cm-head"><h5><i class="fas fa-magic me-2"></i>Generate Timetable</h5>
-    <button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+    <div class="cm-head">
+      <h5><i class="fas fa-magic me-2"></i>Generate Timetable</h5>
+      <button class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+    </div>
     <div class="modal-body">
       <label class="form-label fw-600">Timetable Name</label>
       <input type="text" class="ctrl" id="ttName" value="Semester Timetable"/>
@@ -87,374 +164,643 @@
         <strong>{{ period_slots | selectattr('slot_type','equalto','period') | list | length }} teaching periods</strong>
         × <strong>{{ days | length }} working days</strong> =
         <strong>{{ (period_slots | selectattr('slot_type','equalto','period') | list | length) * (days | length) }}</strong>
-        total slots per class. Break/lunch slots are never allocated.
+        total slots per class. Break/lunch slots are automatically excluded.
+      </div>
+      <!-- Progress bar (shown during generation) -->
+      <div id="genProgressWrap" style="display:none;margin-top:16px">
+        <div class="gen-progress-label" id="genProgressLabel">Starting...</div>
+        <div class="gen-progress-track">
+          <div class="gen-progress-bar" id="genProgressBar" style="width:0%"></div>
+        </div>
       </div>
       <div id="genStatus" class="mt-3"></div>
     </div>
     <div class="cm-foot">
-      <button class="btn-cancel" data-bs-dismiss="modal">Cancel</button>
-      <button class="btn-save" id="genBtn" onclick="confirmGenerate()"><i class="fas fa-magic me-1"></i>Generate</button>
+      <button class="btn-cancel" data-bs-dismiss="modal" id="genCancelBtn">Cancel</button>
+      <button class="btn-save" id="genBtn" onclick="startGenerateSSE()">
+        <i class="fas fa-magic me-1"></i>Generate
+      </button>
     </div>
   </div></div>
 </div>
 
-<!-- EDIT SLOT MODAL -->
+<!-- ═══════════════════════════ EDIT SLOT MODAL ══════════════════════════════ -->
 <div class="modal fade" id="editSlotModal" tabindex="-1">
-  <div class="modal-dialog"><div class="modal-content cm">
-    <div class="cm-head"><h5>Edit Slot — <span id="editSlotLabel"></span></h5>
-    <button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+  <div class="modal-dialog modal-sm"><div class="modal-content cm">
+    <div class="cm-head">
+      <h5><i class="fas fa-edit me-2"></i>Edit Slot</h5>
+      <button class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+    </div>
     <div class="modal-body">
-      <p class="text-muted small mb-3" id="editSlotInfo"></p>
-      <label class="form-label fw-600">Reassign to Staff</label>
-      <div id="staffOptionsList"></div>
+      <div id="editSlotInfo" class="info-note mb-3"></div>
+      <label class="form-label fw-600">Change Staff</label>
+      <select class="ctrl" id="editStaffSelect"></select>
     </div>
     <div class="cm-foot">
       <button class="btn-cancel" data-bs-dismiss="modal">Cancel</button>
-      <button class="btn-save" id="editSlotSave" onclick="saveSlotEdit()" disabled>Save Change</button>
+      <button class="btn-save" onclick="saveSlotEdit()">
+        <i class="fas fa-save me-1"></i>Save
+      </button>
     </div>
   </div></div>
 </div>
 
-<style>
-/* ── Schedule strip ── */
-.schedule-strip{display:flex;align-items:center;gap:6px;flex-wrap:wrap;background:#fff;
-  border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 14px}
-.ss-label{font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;
-  letter-spacing:.05em;white-space:nowrap;margin-right:4px}
-.ss-chip{display:inline-flex;flex-direction:column;align-items:center;padding:4px 10px;
-  border-radius:6px;font-size:11.5px;font-weight:600;line-height:1.3;white-space:nowrap}
-.ss-chip small{font-size:10px;font-weight:400;opacity:.7}
-.period-chip{background:rgba(99,102,241,.1);color:var(--indigo)}
-.break-chip{background:rgba(245,158,11,.1);color:#92400e}
-.lunch-chip{background:rgba(16,185,129,.1);color:#065f46}
-.ss-edit{font-size:12px;color:var(--indigo);text-decoration:none;white-space:nowrap}
+<!-- Toast notification -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index:9999">
+  <div id="appToast" class="toast" role="alert">
+    <div class="toast-header" id="toastHeader">
+      <strong class="me-auto" id="toastTitle">Info</strong>
+      <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+    </div>
+    <div class="toast-body" id="toastBody"></div>
+  </div>
+</div>
 
-/* ── Timetable grid ── */
-.tt-wrap{background:#fff;border-radius:var(--r);box-shadow:var(--sh-sm);
-  overflow:hidden;border:1px solid var(--border)}
-.tt-title{padding:14px 18px;font-family:'Syne',sans-serif;font-weight:700;font-size:15px;
-  border-bottom:1px solid var(--border);background:var(--bg);
-  display:flex;align-items:center;gap:8px}
-
-/* One single table, table-layout:fixed for consistent columns */
-.tt-table{border-collapse:collapse;width:100%;font-size:12px}
-.tt-table colgroup col.col-day{width:88px}
-.tt-table colgroup col.col-period{min-width:110px}
-.tt-table colgroup col.col-break{width:90px}
-.tt-table colgroup col.col-lunch{width:90px}
-
-/* Header row */
-.tt-table thead th{
-  background:#0f172a;color:#fff;padding:9px 8px;
-  text-align:center;font-size:10px;font-weight:700;
-  text-transform:uppercase;letter-spacing:.05em;
-  border-right:1px solid rgba(255,255,255,.08);white-space:nowrap
+<script id="tt-server-data" type="application/json">
+{
+  "days": {{ days | tojson }},
+  "periods": {{ periods | tojson }},
+  "periodSlots": {{ period_slots | tojson }},
+  "classes": {{ classes | tojson }},
+  "staff": {{ staff_list | tojson }},
+  "isAdmin": {{ (current_user.role in ('admin', 'creator')) | tojson }},
+  "activeTtId": {{ (active_timetable.id if active_timetable else None) | tojson }}
 }
-.tt-table thead th.th-day{text-align:left;padding-left:14px}
-.tt-table thead th.th-break{background:#92400e;font-size:9px}
-.tt-table thead th.th-lunch{background:#065f46;font-size:9px}
-.th-time{font-size:9px;color:rgba(255,255,255,.55);font-weight:400;margin-top:2px}
+</script>
 
-/* Day label */
-.tt-table td.td-day{
-  padding:10px 14px;font-weight:700;font-size:12px;
-  background:var(--bg);color:var(--text2);
-  border:1px solid var(--border);white-space:nowrap;
-  vertical-align:middle;text-align:left
-}
-
-/* Period cells */
-.tt-cell{
-  border:1px solid var(--border);vertical-align:top;
-  height:74px;position:relative;text-align:center;padding:0
-}
-.tt-cell.has-subject{
-  background:linear-gradient(135deg,rgba(99,102,241,.07),rgba(139,92,246,.04))
-}
-.tt-cell.is-free{background:#fafbff}
-.free-lbl{display:flex;align-items:center;justify-content:center;
-  height:100%;color:var(--text3);font-size:10.5px;font-style:italic}
-
-/* Cell content */
-.cell-in{padding:7px 6px;height:100%;display:flex;flex-direction:column;
-  justify-content:center;align-items:center;gap:2px}
-.c-subj{font-weight:700;font-size:11.5px;color:var(--indigo);
-  line-height:1.2;text-align:center}
-.c-staff{font-size:9.5px;color:var(--text3);text-align:center}
-.c-cls{font-size:9.5px;color:var(--text3);text-align:center}
-
-/* Edit pencil */
-.cell-edit{position:absolute;top:3px;right:3px;
-  background:rgba(99,102,241,.15);border:none;border-radius:4px;
-  width:20px;height:20px;cursor:pointer;font-size:9px;
-  color:var(--indigo);display:none;align-items:center;justify-content:center;
-  z-index:2;transition:all .15s}
-.tt-cell:hover .cell-edit{display:flex}
-.cell-edit:hover{background:var(--indigo);color:#fff}
-
-/* Break column cells */
-.tt-cell.is-break{
-  background:repeating-linear-gradient(
-    45deg,#fffbeb,#fffbeb 6px,#fef3c7 6px,#fef3c7 12px);
-  border:1px solid #fde68a;vertical-align:middle;text-align:center
-}
-.tt-cell.is-lunch{
-  background:repeating-linear-gradient(
-    45deg,#f0fdf4,#f0fdf4 6px,#dcfce7 6px,#dcfce7 12px);
-  border:1px solid #bbf7d0;vertical-align:middle;text-align:center
-}
-.break-inner{display:flex;flex-direction:column;align-items:center;
-  justify-content:center;height:100%;gap:2px;padding:4px}
-.brk-lbl{font-size:10.5px;font-weight:700;color:#92400e}
-.lnch-lbl{font-size:10.5px;font-weight:700;color:#065f46}
-.brk-time{font-size:9px;color:var(--text3)}
-</style>
-{% endblock %}
-
-{% block scripts %}
 <script>
-const genModal      = new bootstrap.Modal(document.getElementById('genModal'));
-const editSlotModal = new bootstrap.Modal(document.getElementById('editSlotModal'));
+// ══════════════════════════════════════════════════════════════════════════
+// Config from Flask
+// ══════════════════════════════════════════════════════════════════════════
+const _ttDataEl = document.getElementById('tt-server-data');
+const _ttData = _ttDataEl ? JSON.parse(_ttDataEl.textContent) : {};
+const DAYS    = _ttData.days || [];
+const PERIODS = _ttData.periods || [];
+const PERIOD_SLOTS = _ttData.periodSlots || [];
+const CLASSES = _ttData.classes || [];
+const STAFF   = _ttData.staff || [];
+const IS_ADMIN = Boolean(_ttData.isAdmin);
+const ACTIVE_TT_ID = _ttData.activeTtId || null;
 
-// ALL slots in display order (period + break + lunch)
-const ALL_SLOTS  = {{ period_slots | tojson }};
-const DAYS       = {{ days | tojson }};
-const IS_ADMIN   = {{ 'true' if current_user.role == 'admin' else 'false' }};
+// ── dept colour map ────────────────────────────────────────────────────────
+const DEPT_COLORS = {
+  CSE: '#4f46e5', ECE: '#0891b2', MECH: '#d97706', CIVIL: '#059669',
+  COMMON: '#7c3aed', IT: '#db2777', default: '#64748b'
+};
+function deptColor(dept) { return DEPT_COLORS[dept] || DEPT_COLORS.default; }
 
-let currentClassId   = null;
-let currentSlotId    = null;
-let selectedNewStaff = null;
-
+// ══════════════════════════════════════════════════════════════════════════
+// View switching
+// ══════════════════════════════════════════════════════════════════════════
 function switchView(v) {
-  document.getElementById('classView').style.display  = v==='class'?'block':'none';
-  document.getElementById('staffView').style.display  = v==='staff'?'block':'none';
-  document.getElementById('vCls').classList.toggle('active', v==='class');
-  document.getElementById('vStf').classList.toggle('active', v==='staff');
+  document.getElementById('classView').style.display = v === 'class' ? '' : 'none';
+  document.getElementById('staffView').style.display = v === 'staff' ? '' : 'none';
+  document.getElementById('vCls').classList.toggle('active', v === 'class');
+  document.getElementById('vStf').classList.toggle('active', v === 'staff');
 }
 
-function openGenModal() {
-  document.getElementById('genStatus').innerHTML = '';
-  document.getElementById('genBtn').disabled = false;
-  genModal.show();
-}
-
-async function validateTT() {
-  const r     = await fetch('/api/timetable/validate').then(r=>r.json());
-  const panel = document.getElementById('validationPanel');
-  if (r.safe) {
-    panel.innerHTML='<div class="banner banner-success mb-3"><i class="fas fa-check-circle me-2"></i>All checks passed!</div>';
-  } else {
-    let html='<div class="banner banner-danger mb-3"><i class="fas fa-exclamation-triangle me-2"></i><strong>Issues found:</strong><ul class="mb-0 mt-2">';
-    r.warnings.forEach(w=>{html+=`<li>${w}</li>`;});
-    html+='</ul></div>';
-    panel.innerHTML=html;
+// ══════════════════════════════════════════════════════════════════════════
+// Timetable grid renderer — Rotated Format (Days as Rows, Periods as Columns)
+// with horizontal colspan merging for consecutive labs / same subject
+// ══════════════════════════════════════════════════════════════════════════
+function renderGrid(containerId, ttId, grid, days, periodSlots, viewType) {
+  const container = document.getElementById(containerId);
+  if (!ttId) {
+    container.innerHTML = `<div class="empty-state"><i class="fas fa-calendar-times fa-3x mb-3"></i><p>No timetable generated yet.</p></div>`;
+    return;
   }
-  setTimeout(()=>panel.innerHTML='',10000);
-}
 
-async function confirmGenerate() {
-  const name = document.getElementById('ttName').value||'Auto Generated';
-  document.getElementById('genBtn').disabled = true;
-  document.getElementById('genStatus').innerHTML =
-    '<div class="gen-status"><i class="fas fa-spinner fa-spin me-2"></i>Generating — spreading subjects evenly across all days…</div>';
-  try {
-    const res    = await fetch('/api/timetable/generate',{
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({name, force:true})
-    });
-    const result = await res.json();
-    let html = `<div class="alert alert-success"><i class="fas fa-check-circle me-1"></i>
-      Generated! ${result.conflict_count} unresolved conflict(s).</div>`;
-    if (result.conflicts && result.conflicts.length) {
-      html += `<div class="alert alert-warning"><strong>Conflicts (${result.conflicts.length}):</strong><ul class="mb-0 mt-1">`;
-      result.conflicts.slice(0,10).forEach(c=>{
-        html+=`<li><strong>${c.class}</strong>: ${c.subject} — ${c.reason}</li>`;
-      });
-      html += '</ul></div>';
-    }
-    document.getElementById('genStatus').innerHTML = html;
-    setTimeout(()=>{genModal.hide(); location.reload();}, 3000);
-  } catch(e) {
-    document.getElementById('genStatus').innerHTML =
-      '<div class="alert alert-danger">Generation failed. Please try again.</div>';
-    document.getElementById('genBtn').disabled = false;
-  }
-}
+  const teachingSlots = periodSlots.filter(s => s.slot_type === 'period');
 
-async function deleteTT() {
-  if (!confirm('Delete the active timetable?')) return;
-  await fetch('/api/timetable/delete',{method:'DELETE'});
-  location.reload();
-}
-
-/**
- * buildGrid — THE CORRECT DESIGN
- *
- * Structure: ONE ROW PER DAY. 
- * Columns = ALL slots (periods + break + lunch), each as a separate column.
- * - Period columns show subject/staff or FREE
- * - Break/lunch columns show a styled "Break" or "Lunch" cell (same for every day)
- *
- * This eliminates all rowspan complexity. Each day is simply one <tr>.
- */
-function buildGrid(grid, days, allSlots, title, editable) {
-
-  // ── Build colgroup for column widths ──────────────────────────────────
-  let colgroup = '<colgroup><col class="col-day">';
-  allSlots.forEach(s => {
-    if (s.slot_type === 'period')       colgroup += '<col class="col-period">';
-    else if (s.slot_type === 'break')   colgroup += '<col class="col-break">';
-    else if (s.slot_type === 'lunch')   colgroup += '<col class="col-lunch">';
-  });
-  colgroup += '</colgroup>';
-
-  // ── Build header row ──────────────────────────────────────────────────
-  let thead = '<thead><tr><th class="th-day">Day</th>';
-  allSlots.forEach(s => {
-    if (s.slot_type === 'period') {
-      thead += `<th><div>${s.label}</div><div class="th-time">${s.start_time}–${s.end_time}</div></th>`;
-    } else if (s.slot_type === 'break') {
-      thead += `<th class="th-break"><div><i class="fas fa-coffee me-1"></i>Break</div><div class="th-time">${s.start_time}–${s.end_time}</div></th>`;
-    } else if (s.slot_type === 'lunch') {
-      thead += `<th class="th-lunch"><div><i class="fas fa-utensils me-1"></i>Lunch</div><div class="th-time">${s.start_time}–${s.end_time}</div></th>`;
-    }
-  });
-  thead += '</tr></thead>';
-
-  // ── Build one row per day ─────────────────────────────────────────────
-  let tbody = '<tbody>';
-  days.forEach(day => {
-    tbody += `<tr><td class="td-day">${day}</td>`;
-
-    allSlots.forEach(s => {
-      if (s.slot_type === 'period') {
-        const p    = s.slot_order;
-        const slot = (grid[day] || {})[p];
-        if (slot) {
-          const lab    = slot.is_lab        ? '🔬 ' : '';
-          const edited = slot.is_manual_edit ? ' ✏'  : '';
-          const editBtn = (editable && IS_ADMIN)
-            ? `<button class="cell-edit" onclick="openEditSlot(${slot.slot_id},'${slot.subject_name.replace(/'/g,"\\'")}','${day}',${p})" title="Reassign staff"><i class="fas fa-pencil-alt"></i></button>`
-            : '';
-          tbody += `<td class="tt-cell has-subject">
-            ${editBtn}
-            <div class="cell-in">
-              <div class="c-subj">${lab}${slot.subject_name}${edited}</div>
-              <div class="c-staff"><i class="fas fa-user-tie" style="font-size:8px;opacity:.6;margin-right:2px"></i>${slot.staff_name}</div>
-              <div class="c-cls"><i class="fas fa-door-open" style="font-size:8px;opacity:.6;margin-right:2px"></i>${slot.class_name}</div>
+  let html = `<div class="tt-grid-wrapper"><table class="tt-grid">
+    <thead><tr>
+      <th class="tt-th-day-col">Day / Session</th>
+      ${periodSlots.map(s => {
+        if (s.slot_type !== 'period') {
+          const icon = s.slot_type === 'lunch' ? '🍽️' : '☕';
+          return `<th class="tt-th-break" title="${s.label} (${s.start_time}–${s.end_time})">
+            <div class="th-break-content">
+              <span>${icon} ${s.label}</span>
+              <small>${s.start_time}–${s.end_time}</small>
             </div>
-          </td>`;
+          </th>`;
         } else {
-          tbody += `<td class="tt-cell is-free"><div class="free-lbl">FREE</div></td>`;
+          return `<th class="tt-th-slot">
+            <div class="th-slot-content">
+              <span class="period-num">P${s.slot_order}</span>
+              <span class="period-label">${s.label}</span>
+              <small>${s.start_time}–${s.end_time}</small>
+            </div>
+          </th>`;
         }
-      } else if (s.slot_type === 'break') {
-        tbody += `<td class="tt-cell is-break">
-          <div class="break-inner">
-            <div class="brk-lbl"><i class="fas fa-coffee"></i></div>
-            <div class="brk-time">${s.start_time}<br>${s.end_time}</div>
+      }).join('')}
+    </tr></thead>
+    <tbody>`;
+
+  for (const day of days) {
+    html += `<tr class="tt-day-row">
+      <td class="tt-td-day-col">
+        <div class="day-badge-col">${day}</div>
+      </td>`;
+
+    const skipOrders = new Set();
+
+    for (let i = 0; i < periodSlots.length; i++) {
+      const slot = periodSlots[i];
+      if (slot.slot_type !== 'period') {
+        html += `<td class="tt-break-col-cell">
+          <div class="break-col-strip" title="${slot.label} (${slot.start_time}–${slot.end_time})">
+            <span>${slot.label}</span>
           </div>
         </td>`;
-      } else if (s.slot_type === 'lunch') {
-        tbody += `<td class="tt-cell is-lunch">
-          <div class="break-inner">
-            <div class="lnch-lbl"><i class="fas fa-utensils"></i></div>
-            <div class="brk-time">${s.start_time}<br>${s.end_time}</div>
-          </div>
-        </td>`;
+        continue;
       }
-    });
 
-    tbody += '</tr>';
-  });
-  tbody += '</tbody>';
+      const order = slot.slot_order;
+      if (skipOrders.has(order)) continue;
 
-  return `<div class="tt-wrap">
-    <div class="tt-title">
-      <i class="fas fa-calendar-check" style="color:var(--indigo)"></i>${title}
-    </div>
-    <div class="table-responsive">
-      <table class="tt-table">${colgroup}${thead}${tbody}</table>
-    </div>
-  </div>`;
+      const cell = grid[day] && grid[day][order];
+      const isDroppable = IS_ADMIN && ttId;
+      const dropAttrs = isDroppable
+        ? `ondragover="onDragOver(event,'${day}',${order})"
+           ondragleave="onDragLeave(event)"
+           ondrop="onDrop(event,'${day}',${order})"`
+        : '';
+
+      // Check consecutive teaching periods for horizontal merge (colspan)
+      let colspan = 1;
+      const curIdx = teachingSlots.findIndex(s => s.slot_order === order);
+      if (curIdx !== -1 && cell) {
+        let j = curIdx + 1;
+        while (j < teachingSlots.length) {
+          const nextSlot = teachingSlots[j];
+          const prevSlot = teachingSlots[j - 1];
+          if (nextSlot.slot_order !== prevSlot.slot_order + 1) break;
+
+          const hasSeparator = periodSlots.some(s =>
+            s.slot_type !== 'period' &&
+            prevSlot.slot_order < s.slot_order &&
+            s.slot_order < nextSlot.slot_order
+          );
+          if (hasSeparator) break;
+
+          const nextCell = grid[day] && grid[day][nextSlot.slot_order];
+          if (nextCell &&
+              nextCell.subject_id === cell.subject_id &&
+              nextCell.staff_id === cell.staff_id) {
+            colspan++;
+            skipOrders.add(nextSlot.slot_order);
+            j++;
+          } else {
+            break;
+          }
+        }
+      }
+
+      const isMerged = colspan > 1;
+      const colspanAttr = isMerged ? ` colspan="${colspan}"` : '';
+
+      html += `<td class="tt-td-cell${isMerged ? ' tt-td-merged-h' : ''}" data-day="${day}" data-period="${order}"${colspanAttr} ${dropAttrs}>`;
+
+      if (cell) {
+        const color = deptColor(cell.department || '');
+        const isLab = cell.is_lab;
+        const edited = cell.is_manual_edit ? ' edited-badge' : '';
+        const dragAttrs = IS_ADMIN
+          ? `draggable="true"
+             ondragstart="onDragStart(event,${cell.slot_id},'${day}',${order})"`
+          : '';
+
+        let mergeTimeLabel = '';
+        if (isMerged && teachingSlots.length > 0) {
+          const endSlot = teachingSlots[curIdx + colspan - 1];
+          if (endSlot) {
+            mergeTimeLabel = `${slot.start_time}–${endSlot.end_time}`;
+          }
+        }
+
+        html += `<div class="slot-card${edited}${isMerged ? ' slot-card-merged-h' : ''}"
+                      style="--card-color:${color}"
+                      data-slot-id="${cell.slot_id}"
+                      ${dragAttrs}>
+          <div class="slot-card-top">
+            ${isLab ? `<span class="lab-badge">🔬 LAB</span>` : ''}
+            ${isMerged ? `<span class="merge-badge" title="${colspan} consecutive periods">⟵ ${colspan}P ⟶</span>` : ''}
+            ${cell.is_manual_edit ? `<span class="edit-badge" title="Manually edited">✎</span>` : ''}
+            ${IS_ADMIN ? `<button class="slot-edit-btn ms-auto" onclick="openSlotEdit(${cell.slot_id},'${cell.subject_name.replace(/'/g, "\\'")}','${day}',${order})" title="Edit staff">
+              <i class="fas fa-pen"></i>
+            </button>` : ''}
+          </div>
+          <div class="slot-subject">${cell.subject_name}</div>
+          ${isMerged ? `<div class="slot-merge-time"><i class="fas fa-clock me-1"></i>${mergeTimeLabel}</div>` : ''}
+          <div class="slot-staff"><i class="fas fa-user-circle me-1"></i>${viewType === 'staff' ? cell.class_name : cell.staff_name}</div>
+        </div>`;
+      } else if (isDroppable) {
+        html += `<div class="slot-empty-drop" title="Drop a slot here"></div>`;
+      }
+
+      html += `</td>`;
+    }
+
+    html += `</tr>`;
+  }
+
+  html += `</tbody></table></div>`;
+  container.innerHTML = html;
 }
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// Load class timetable
+// ══════════════════════════════════════════════════════════════════════════
+let currentClassId  = null;
+let currentTTId     = null;
 
 async function loadClassTT() {
-  const id  = document.getElementById('classSelect').value;
-  currentClassId = id;
-  const div = document.getElementById('classTTDiv');
-  if (!id) {
-    div.innerHTML = '';
+  const classId = document.getElementById('classSelect').value;
+  if (!classId) {
+    document.getElementById('classTTDiv').innerHTML = '';
     document.getElementById('exportBtns').style.display = 'none';
     return;
   }
-  div.innerHTML = '<div class="load-msg"><i class="fas fa-spinner fa-spin me-2"></i>Loading timetable…</div>';
-  const data  = await fetch('/api/timetable/class/' + id).then(r=>r.json());
-  const label = document.getElementById('classSelect').options[document.getElementById('classSelect').selectedIndex].text;
-  div.innerHTML = buildGrid(data.grid, DAYS, ALL_SLOTS, label + ' Timetable', true);
-  document.getElementById('exportBtns').style.cssText = 'display:flex;gap:8px';
+  currentClassId = classId;
+  document.getElementById('classTTDiv').innerHTML = '<div class="loading-grid"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+
+  const res  = await fetch(`/api/timetable/class/${classId}`);
+  const data = await res.json();
+  currentTTId = data.timetable_id;
+
+  renderGrid('classTTDiv', data.timetable_id, data.grid, data.days, data.period_slots, 'class');
+  document.getElementById('exportBtns').style.display = data.timetable_id ? 'flex' : 'none';
 }
 
 async function loadStaffTT() {
-  const id  = document.getElementById('staffSelect').value;
-  const div = document.getElementById('staffTTDiv');
-  if (!id) { div.innerHTML = ''; return; }
-  div.innerHTML = '<div class="load-msg"><i class="fas fa-spinner fa-spin me-2"></i>Loading schedule…</div>';
-  const data  = await fetch('/api/timetable/staff/' + id).then(r=>r.json());
-  const label = document.getElementById('staffSelect').options[document.getElementById('staffSelect').selectedIndex].text;
-  div.innerHTML = buildGrid(data.grid, DAYS, ALL_SLOTS, label + ' Schedule', false);
+  const staffId = document.getElementById('staffSelect').value;
+  if (!staffId) {
+    document.getElementById('staffTTDiv').innerHTML = '';
+    return;
+  }
+  document.getElementById('staffTTDiv').innerHTML = '<div class="loading-grid"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+  const res  = await fetch(`/api/timetable/staff/${staffId}`);
+  const data = await res.json();
+  renderGrid('staffTTDiv', data.timetable_id, data.grid, data.days, data.period_slots, 'staff');
 }
 
-async function openEditSlot(slotId, subjectName, day, period) {
-  currentSlotId    = slotId;
-  selectedNewStaff = null;
-  document.getElementById('editSlotLabel').textContent  = `${subjectName} — ${day}`;
-  document.getElementById('editSlotInfo').textContent   = 'Choose a staff member to reassign this period:';
-  document.getElementById('editSlotSave').disabled      = true;
-  document.getElementById('staffOptionsList').innerHTML =
-    '<div class="text-center py-3"><i class="fas fa-spinner fa-spin fa-lg text-primary"></i></div>';
-  editSlotModal.show();
-  const opts = await fetch('/api/timetable/slot/' + slotId + '/staff_options').then(r=>r.json());
-  let html = '<div class="staff-opts">';
-  opts.forEach(s => {
-    const cls  = s.is_current ? 'so-item current' : s.available ? 'so-item' : 'so-item busy';
-    const info = s.is_current
-      ? 'Currently assigned'
-      : s.available ? `${s.max_periods_per_week - s.allocated_periods} slots free`
-      : 'Clash — busy at this time';
-    const icon = (s.available||s.is_current)
-      ? '<i class="fas fa-check-circle so-check"></i>'
-      : '<i class="fas fa-times-circle so-busy"></i>';
-    html += `<div class="${cls}" onclick="selectStaffOpt(this,${s.id})">
-      <div class="so-ava">${s.name[0]}</div>
-      <div class="so-info"><strong>${s.name}</strong><small>${s.department} · ${info}</small></div>
-      ${icon}
-    </div>`;
-  });
-  if (!opts.length) html += '<p class="text-muted text-center py-3">No eligible staff found.</p>';
-  html += '</div>';
-  document.getElementById('staffOptionsList').innerHTML = html;
+// ══════════════════════════════════════════════════════════════════════════
+// Drag-and-drop
+// ══════════════════════════════════════════════════════════════════════════
+let dragSlotId   = null;
+let dragFromDay  = null;
+let dragFromPer  = null;
+let checkTimer   = null;
+
+function onDragStart(evt, slotId, day, period) {
+  dragSlotId  = slotId;
+  dragFromDay = day;
+  dragFromPer = period;
+  evt.dataTransfer.effectAllowed = 'move';
+  evt.target.classList.add('dragging');
 }
 
-function selectStaffOpt(el, staffId) {
-  if (el.classList.contains('busy')) return;
-  document.querySelectorAll('.so-item').forEach(e=>e.classList.remove('selected'));
-  el.classList.add('selected');
-  selectedNewStaff = staffId;
-  document.getElementById('editSlotSave').disabled = false;
+function onDragOver(evt, day, period) {
+  evt.preventDefault();
+  const cell = evt.currentTarget;
+  if (cell.classList.contains('conflict-target') || cell.classList.contains('valid-target')) return;
+
+  // Debounce server check (don't hammer on every pixel move)
+  clearTimeout(checkTimer);
+  checkTimer = setTimeout(async () => {
+    if (!dragSlotId) return;
+    const res  = await fetch(`/api/timetable/slot/${dragSlotId}/check_move?day=${encodeURIComponent(day)}&period=${period}`);
+    const data = await res.json();
+    cell.classList.remove('conflict-target', 'valid-target');
+    cell.classList.add(data.ok ? 'valid-target' : 'conflict-target');
+    if (!data.ok && data.conflicts.length) {
+      cell.title = data.conflicts[0].reason;
+    } else {
+      cell.title = 'Drop to move here';
+    }
+  }, 80);
+}
+
+function onDragLeave(evt) {
+  evt.currentTarget.classList.remove('conflict-target', 'valid-target');
+}
+
+async function onDrop(evt, day, period) {
+  evt.preventDefault();
+  const cell = evt.currentTarget;
+  cell.classList.remove('conflict-target', 'valid-target');
+
+  if (!dragSlotId) return;
+
+  // Check if there's already a slot in the target cell — if yes, swap
+  const existingCard = cell.querySelector('.slot-card');
+  const existingSlotId = existingCard ? parseInt(existingCard.dataset.slotId) : null;
+
+  let res, data;
+  if (existingSlotId && existingSlotId !== dragSlotId) {
+    res  = await fetch(`/api/timetable/slot/${dragSlotId}/swap`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({target_slot_id: existingSlotId})
+    });
+  } else {
+    res  = await fetch(`/api/timetable/slot/${dragSlotId}/move`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({day, period})
+    });
+  }
+
+  data = await res.json();
+  if (data.success) {
+    showToast('success', 'Slot Updated', data.message || 'Slot moved successfully');
+    loadClassTT();  // Reload grid
+  } else {
+    showToast('danger', 'Conflict', data.message || 'Cannot move slot');
+  }
+
+  // Reset drag state
+  dragSlotId = dragFromDay = dragFromPer = null;
+  document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
+}
+
+document.addEventListener('dragend', () => {
+  document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
+  document.querySelectorAll('.conflict-target,.valid-target').forEach(el =>
+    el.classList.remove('conflict-target', 'valid-target')
+  );
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// Edit slot staff
+// ══════════════════════════════════════════════════════════════════════════
+let editingSlotId = null;
+
+async function openSlotEdit(slotId, subjectName, day, period) {
+  editingSlotId = slotId;
+  document.getElementById('editSlotInfo').innerHTML =
+    `<strong>${subjectName}</strong> — ${day}, Period ${period}`;
+
+  const res     = await fetch(`/api/timetable/slot/${slotId}/staff_options`);
+  const options = await res.json();
+  const sel = document.getElementById('editStaffSelect');
+  sel.innerHTML = options.map(s => {
+    const busy   = s.is_busy ? ' (BUSY)' : '';
+    const avail  = !s.available_today ? ' (Not available today)' : '';
+    const rem    = `[${s.remaining} periods left]`;
+    const cur    = s.is_current ? ' ✓' : '';
+    return `<option value="${s.id}" ${s.is_busy ? 'disabled' : ''} ${s.is_current ? 'selected' : ''}>
+      ${s.name} (${s.department}) ${rem}${busy}${avail}${cur}
+    </option>`;
+  }).join('');
+
+  new bootstrap.Modal(document.getElementById('editSlotModal')).show();
 }
 
 async function saveSlotEdit() {
-  if (!selectedNewStaff) return;
-  const r = await fetch('/api/timetable/slot/' + currentSlotId + '/edit', {
-    method: 'PUT', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({staff_id: selectedNewStaff})
+  const staffId = parseInt(document.getElementById('editStaffSelect').value);
+  const res  = await fetch(`/api/timetable/slot/${editingSlotId}/edit`, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({staff_id: staffId})
   });
-  const d = await r.json();
-  if (d.success) { editSlotModal.hide(); showToast('Slot reassigned!'); loadClassTT(); }
-  else showToast(d.message||'Failed to update','danger');
+  const data = await res.json();
+  bootstrap.Modal.getInstance(document.getElementById('editSlotModal'))?.hide();
+  if (data.success) {
+    showToast('success', 'Updated', 'Staff changed successfully');
+    loadClassTT();
+  } else {
+    showToast('danger', 'Error', data.message);
+  }
 }
 
-function exportCSV() { if (currentClassId) window.location='/api/timetable/export/csv/'+currentClassId; }
-function exportPDF() { if (currentClassId) window.location='/api/timetable/export/pdf/'+currentClassId; }
+// ══════════════════════════════════════════════════════════════════════════
+// SSE-based timetable generation with live progress bar
+// ══════════════════════════════════════════════════════════════════════════
+let evtSource = null;
+
+function openGenModal() {
+  document.getElementById('genProgressWrap').style.display = 'none';
+  document.getElementById('genProgressBar').style.width = '0%';
+  document.getElementById('genStatus').innerHTML = '';
+  document.getElementById('genBtn').disabled = false;
+  new bootstrap.Modal(document.getElementById('genModal')).show();
+}
+
+async function startGenerateSSE() {
+  const name  = document.getElementById('ttName').value.trim() || 'Auto Generated';
+  const wrap  = document.getElementById('genProgressWrap');
+  const bar   = document.getElementById('genProgressBar');
+  const label = document.getElementById('genProgressLabel');
+  const stat  = document.getElementById('genStatus');
+  const btn   = document.getElementById('genBtn');
+
+  wrap.style.display = 'block';
+  bar.style.width    = '2%';
+  label.textContent  = 'Starting...';
+  stat.innerHTML     = '';
+  btn.disabled       = true;
+
+  // First validate
+  const vRes  = await fetch('/api/timetable/validate');
+  const vData = await vRes.json();
+
+  if (!vData.safe && vData.warnings.length) {
+    stat.innerHTML = `<div class="warn-list">${vData.warnings.map(w =>
+      `<div class="warn-item"><i class="fas fa-exclamation-triangle me-1"></i>${w}</div>`
+    ).join('')}
+    <button class="btn-save mt-2 w-100" onclick="forceGenerateSSE('${name}')">
+      <i class="fas fa-bolt me-1"></i>Generate Anyway (Force)
+    </button></div>`;
+    btn.disabled = false;
+    return;
+  }
+
+  runSSE(name, false);
+}
+
+function forceGenerateSSE(name) {
+  document.getElementById('genStatus').innerHTML = '';
+  runSSE(name, true);
+}
+
+function runSSE(name, force) {
+  const bar   = document.getElementById('genProgressBar');
+  const label = document.getElementById('genProgressLabel');
+  const stat  = document.getElementById('genStatus');
+  const btn   = document.getElementById('genBtn');
+  document.getElementById('genCancelBtn').textContent = 'Close when done';
+
+  if (evtSource) evtSource.close();
+
+  const url = `/api/timetable/generate/stream?name=${encodeURIComponent(name)}&force=${force}`;
+  evtSource = new EventSource(url);
+
+  evtSource.onmessage = function(e) {
+    const event = JSON.parse(e.data);
+
+    if (event.type === 'warnings') {
+      stat.innerHTML = event.warnings.map(w =>
+        `<div class="warn-item"><i class="fas fa-exclamation-triangle me-1"></i>${w}</div>`
+      ).join('');
+      btn.disabled = false;
+      evtSource.close();
+      return;
+    }
+
+    if (event.pct === -1) {
+      stat.innerHTML = `<div class="alert alert-danger"><i class="fas fa-times-circle me-2"></i>${event.error}</div>`;
+      btn.disabled = false;
+      evtSource.close();
+      return;
+    }
+
+    // Progress update
+    bar.style.width   = event.pct + '%';
+    label.textContent = event.msg;
+
+    if (event.pct === 100) {
+      evtSource.close();
+      btn.disabled = false;
+      const cCount = event.conflict_count || 0;
+      stat.innerHTML = `<div class="alert ${cCount > 0 ? 'alert-warning' : 'alert-success'}">
+        <i class="fas fa-${cCount > 0 ? 'exclamation-triangle' : 'check-circle'} me-2"></i>
+        Timetable generated! ${cCount > 0 ? cCount + ' conflict(s) found.' : 'No conflicts! 🎉'}
+      </div>`;
+      setTimeout(() => {
+        bootstrap.Modal.getInstance(document.getElementById('genModal'))?.hide();
+        location.reload();
+      }, 2000);
+    }
+  };
+
+  evtSource.onerror = function() {
+    evtSource.close();
+    stat.innerHTML = `<div class="alert alert-danger">Connection error during generation. Please try again.</div>`;
+    btn.disabled = false;
+  };
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Validate
+// ══════════════════════════════════════════════════════════════════════════
+async function validateTT() {
+  document.getElementById('validateBtn').innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Validating…';
+  const res  = await fetch('/api/timetable/validate');
+  const data = await res.json();
+  document.getElementById('validateBtn').innerHTML = '<i class="fas fa-check-circle me-1"></i>Validate';
+  const panel = document.getElementById('validationPanel');
+  if (data.safe) {
+    panel.innerHTML = `<div class="banner banner-success mb-3"><i class="fas fa-check-circle me-2"></i>Validation passed — ready to generate!</div>`;
+  } else {
+    panel.innerHTML = `<div class="banner banner-warn mb-3">
+      <i class="fas fa-exclamation-triangle me-2"></i>
+      <strong>${data.warnings.length} validation issue(s):</strong>
+      <ul class="mb-0 mt-2">${data.warnings.map(w => `<li>${w}</li>`).join('')}</ul>
+    </div>`;
+  }
+  setTimeout(() => panel.innerHTML = '', 8000);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Delete timetable
+// ══════════════════════════════════════════════════════════════════════════
+async function deleteTT() {
+  if (!confirm('Delete the current active timetable? This cannot be undone.')) return;
+  const res  = await fetch('/api/timetable/delete', {method: 'DELETE'});
+  const data = await res.json();
+  if (data.success) location.reload();
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Export
+// ══════════════════════════════════════════════════════════════════════════
+function exportCSV() { window.open(`/api/timetable/export/csv/${currentClassId}`, '_blank'); }
+function exportPDF() { window.open(`/api/timetable/export/pdf/${currentClassId}`, '_blank'); }
+function openOfficialPrint() { if (currentClassId) window.open(`/timetable/print/${currentClassId}`, '_blank'); }
+function downloadImageDirect() { if (currentClassId) window.open(`/timetable/print/${currentClassId}`, '_blank'); }
+
+// ══════════════════════════════════════════════════════════════════════════
+// Conflicts panel toggle
+// ══════════════════════════════════════════════════════════════════════════
+function toggleConflicts() {
+  const list = document.getElementById('conflictList');
+  const icon = document.getElementById('conflictChevron');
+  const isHidden = list.style.display === 'none';
+  list.style.display = isHidden ? '' : 'none';
+  icon.className = isHidden ? 'fas fa-chevron-up' : 'fas fa-chevron-down';
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Toast helper
+// ══════════════════════════════════════════════════════════════════════════
+function showToast(type, title, body) {
+  const el     = document.getElementById('appToast');
+  const header = document.getElementById('toastHeader');
+  document.getElementById('toastTitle').textContent = title;
+  document.getElementById('toastBody').textContent  = body;
+  const colorMap = {success: '#10b981', danger: '#ef4444', warning: '#f59e0b', info: '#3b82f6'};
+  header.style.background = colorMap[type] || '#64748b';
+  header.style.color      = 'white';
+  new bootstrap.Toast(el, {delay: 4000}).show();
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Department Filtering for Class & Staff Views
+// ══════════════════════════════════════════════════════════════════════════
+function filterByDept(deptCode, btnEl) {
+  document.querySelectorAll('.dept-pill').forEach(b => b.classList.remove('active'));
+  if (btnEl) btnEl.classList.add('active');
+
+  // Filter class dropdown
+  const classSelect = document.getElementById('classSelect');
+  let firstVisibleClass = '';
+  for (let opt of classSelect.options) {
+    if (!opt.value) continue;
+    const optDept = opt.dataset.dept || '';
+    if (deptCode === 'all' || optDept === deptCode || (deptCode === 'S&H' && optDept === 'COMMON')) {
+      opt.style.display = '';
+      if (!firstVisibleClass) firstVisibleClass = opt.value;
+    } else {
+      opt.style.display = 'none';
+    }
+  }
+  if (firstVisibleClass) {
+    classSelect.value = firstVisibleClass;
+    loadClassTT();
+  }
+
+  // Filter staff dropdown
+  const staffSelect = document.getElementById('staffSelect');
+  let firstVisibleStaff = '';
+  for (let opt of staffSelect.options) {
+    if (!opt.value) continue;
+    const optDept = opt.dataset.dept || '';
+    // Show faculty belonging to this dept, or S&H / COMMON faculty who teach across depts
+    if (deptCode === 'all' || optDept === deptCode || optDept === 'S&H' || optDept === 'COMMON') {
+      opt.style.display = '';
+      if (!firstVisibleStaff) firstVisibleStaff = opt.value;
+    } else {
+      opt.style.display = 'none';
+    }
+  }
+  if (document.getElementById('staffView').style.display !== 'none' && firstVisibleStaff) {
+    staffSelect.value = firstVisibleStaff;
+    loadStaffTT();
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Init: auto-load first class if timetable exists
+// ══════════════════════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  if (ACTIVE_TT_ID && CLASSES.length > 0) {
+    const sel = document.getElementById('classSelect');
+    sel.value = CLASSES[0].id;
+    loadClassTT();
+  }
+});
 </script>
 {% endblock %}

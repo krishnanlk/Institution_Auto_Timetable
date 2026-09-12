@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Timetable – {{ data.institution.name }} – {{ data.class.name }}</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Times New Roman', Times, 'Liberation Serif', serif;
+      background: #e2e8f0;
+      color: #000;
+      padding: 20px 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* ── Action Toolbar (Hidden in Print & Image Export) ── */
+    .action-toolbar {
+      width: 1080px;
+      max-width: 96vw;
+      background: #1e293b;
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    .toolbar-left, .toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .toolbar-title {
+      font-weight: 600;
+      font-size: 15px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-tb {
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+      text-decoration: none;
+    }
+
+    .btn-tb-primary {
+      background: #10b981;
+      color: #fff;
+    }
+    .btn-tb-primary:hover {
+      background: #059669;
+      transform: translateY(-1px);
+    }
+
+    .btn-tb-secondary {
+      background: #3b82f6;
+      color: #fff;
+    }
+    .btn-tb-secondary:hover {
+      background: #2563eb;
+    }
+
+    .btn-tb-dark {
+      background: #334155;
+      color: #e2e8f0;
+    }
+    .btn-tb-dark:hover {
+      background: #475569;
+      color: #fff;
+    }
+
+    .select-class-ctrl {
+      background: #0f172a;
+      border: 1px solid #475569;
+      color: #fff;
+      padding: 7px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+
+    /* ── Institutional Print/Capture Paper Sheet ── */
+    .timetable-sheet {
+      width: 1080px;
+      max-width: 98vw;
+      background: #ffffff;
+      padding: 24px 30px 20px 30px;
+      box-shadow: 0 5px 25px rgba(0,0,0,0.12);
+      border-radius: 2px;
+      position: relative;
+    }
+
+    /* Header styling matching official institutional format */
+    .inst-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 10px;
+      position: relative;
+    }
+
+    .logo-container {
+      width: 90px;
+      height: 90px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .college-logo-img {
+      max-width: 85px;
+      max-height: 85px;
+      object-fit: contain;
+    }
+
+    .college-logo-svg {
+      width: 80px;
+      height: 80px;
+    }
+
+    .inst-title-block {
+      flex: 1;
+      text-align: center;
+      padding: 0 15px;
+    }
+
+    .college-name {
+      font-size: 20px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      line-height: 1.25;
+      color: #000;
+    }
+
+    .college-address {
+      font-size: 13px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      margin-top: 3px;
+      color: #111;
+    }
+
+    .department-name {
+      font-size: 14px;
+      font-weight: bold;
+      margin-top: 4px;
+      color: #000;
+    }
+
+    .table-title {
+      font-size: 13px;
+      font-weight: bold;
+      margin-top: 2px;
+      color: #000;
+    }
+
+    /* Meta details row: Venue, Class, w.e.f., Strength */
+    .meta-details-bar {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      font-weight: bold;
+      margin-bottom: 8px;
+      padding: 0 2px;
+      border-bottom: 1.5px solid #000;
+      padding-bottom: 4px;
+    }
+
+    .meta-item {
+      display: inline-block;
+    }
+
+    /* ── Main Timetable Grid ── */
+    .timetable-grid-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1.5px solid #000;
+      text-align: center;
+      font-size: 11px;
+      margin-bottom: 14px;
+    }
+
+    .timetable-grid-table th, 
+    .timetable-grid-table td {
+      border: 1px solid #000;
+      padding: 5px 4px;
+      height: 38px;
+      vertical-align: middle;
+    }
+
+    .timetable-grid-table th {
+      background: #f8fafc;
+      font-weight: bold;
+      font-size: 11px;
+      line-height: 1.2;
+    }
+
+    .day-cell {
+      font-weight: bold;
+      width: 85px;
+      background: #f8fafc;
+      text-align: center;
+    }
+
+    .subject-abbr {
+      font-weight: bold;
+      font-size: 12px;
+      letter-spacing: 0.5px;
+      display: block;
+    }
+
+    .lab-merged-td {
+      padding: 4px 12px !important;
+    }
+
+    .lab-arrow-span {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      font-weight: bold;
+      font-size: 12px;
+      letter-spacing: 0.5px;
+      width: 100%;
+    }
+
+    .arrow-line {
+      flex: 1;
+      height: 1.5px;
+      background: #000;
+      position: relative;
+    }
+
+    .arrow-left-line::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: -3.5px;
+      width: 0;
+      height: 0;
+      border-top: 4px solid transparent;
+      border-bottom: 4px solid transparent;
+      border-right: 7px solid #000;
+    }
+
+    .arrow-right-line::after {
+      content: '';
+      position: absolute;
+      right: 0;
+      top: -3.5px;
+      width: 0;
+      height: 0;
+      border-top: 4px solid transparent;
+      border-bottom: 4px solid transparent;
+      border-left: 7px solid #000;
+    }
+
+    .lab-abbr-text {
+      font-weight: bold;
+      font-size: 12px;
+      white-space: nowrap;
+      padding: 0 4px;
+    }
+
+    .break-cell {
+      background: #f1f5f9;
+      font-size: 10px;
+      font-weight: bold;
+      color: #475569;
+      letter-spacing: 0.5px;
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+      width: 24px;
+      padding: 2px;
+    }
+
+    /* ── Legend Tables ── */
+    .legend-wrapper {
+      width: 100%;
+      margin-top: 4px;
+    }
+
+    .legend-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1.5px solid #000;
+      font-size: 11px;
+      margin-bottom: 12px;
+    }
+
+    .legend-table th, 
+    .legend-table td {
+      border: 1px solid #000;
+      padding: 4px 6px;
+      vertical-align: middle;
+    }
+
+    .legend-table th {
+      background: #f8fafc;
+      font-weight: bold;
+      text-align: center;
+      font-size: 11px;
+    }
+
+    .legend-section-header {
+      background: #f1f5f9;
+      font-weight: bold;
+      text-align: center;
+      font-size: 11.5px;
+      letter-spacing: 0.5px;
+    }
+
+    .col-sl { width: 50px; text-align: center; }
+    .col-abbr { width: 130px; text-align: center; font-weight: bold; }
+    .col-code { width: 100px; text-align: center; font-family: monospace; font-weight: bold; }
+    .col-name { text-align: left; }
+    .col-fac { width: 260px; text-align: left; }
+
+    /* ── Signatures Block ── */
+    .signatures-block {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 40px;
+      padding: 0 20px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+
+    .sig-item {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .sig-space {
+      height: 35px;
+    }
+
+    /* ── Customize Modal (Overlay) ── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 9999;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    .modal-card {
+      background: #ffffff;
+      width: 550px;
+      max-width: 90vw;
+      border-radius: 10px;
+      padding: 22px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }
+
+    .modal-card h3 {
+      font-size: 16px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .form-group {
+      margin-bottom: 12px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #334155;
+      margin-bottom: 4px;
+    }
+
+    .form-ctrl {
+      width: 100%;
+      padding: 7px 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    /* ── Print Specific Optimization (Strict A4 Landscape 1-Page Fit) ── */
+    @media print {
+      @page {
+        size: A4 landscape;
+        margin: 4mm 6mm;
+      }
+
+      html, body {
+        width: 100% !important;
+        height: 100% !important;
+        max-height: 100vh !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        background: #ffffff !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+
+      .action-toolbar, 
+      .modal-overlay, 
+      #actionToolbar {
+        display: none !important;
+      }
+
+      .timetable-sheet {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 auto !important;
+        padding: 2px 6px 2px 6px !important;
+        box-shadow: none !important;
+        border: none !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+        box-sizing: border-box !important;
+      }
+
+      /* Compact Header */
+      .inst-header {
+        margin-bottom: 3px !important;
+      }
+      .logo-container {
+        width: 50px !important;
+        height: 50px !important;
+      }
+      .college-logo-img, .college-logo-svg {
+        max-width: 48px !important;
+        max-height: 48px !important;
+      }
+      .inst-title-block {
+        padding: 0 8px !important;
+      }
+      .college-name {
+        font-size: 14px !important;
+        line-height: 1.15 !important;
+      }
+      .college-address {
+        font-size: 9.5px !important;
+        margin-top: 1px !important;
+      }
+      .department-name {
+        font-size: 11px !important;
+        margin-top: 1px !important;
+      }
+      .table-title {
+        font-size: 10px !important;
+        margin-top: 1px !important;
+      }
+
+      /* Compact Meta details */
+      .meta-details-bar {
+        font-size: 9px !important;
+        margin-bottom: 3px !important;
+        padding-bottom: 2px !important;
+        border-bottom: 1.2px solid #000 !important;
+      }
+
+      /* Compact Timetable Grid */
+      .timetable-grid-table {
+        margin-bottom: 4px !important;
+        border: 1.2px solid #000 !important;
+      }
+      .timetable-grid-table th, 
+      .timetable-grid-table td {
+        padding: 1px 2px !important;
+        height: 22px !important;
+        font-size: 8.5px !important;
+        line-height: 1.15 !important;
+      }
+      .timetable-grid-table th {
+        font-size: 8.5px !important;
+        background: #f8fafc !important;
+      }
+      .timetable-grid-table th span {
+        font-size: 7.5px !important;
+      }
+      .day-cell {
+        width: 68px !important;
+        font-size: 9px !important;
+        font-weight: bold !important;
+      }
+      .subject-abbr {
+        font-size: 9px !important;
+        font-weight: bold !important;
+      }
+      .lab-merged-td {
+        padding: 1px 6px !important;
+      }
+      .lab-arrow-span {
+        gap: 5px !important;
+        font-size: 9px !important;
+      }
+      .lab-abbr-text {
+        font-size: 9px !important;
+      }
+      .arrow-line {
+        height: 1px !important;
+      }
+      .arrow-left-line::before, .arrow-right-line::after {
+        top: -3px !important;
+        border-top-width: 3px !important;
+        border-bottom-width: 3px !important;
+      }
+      .break-cell {
+        width: 16px !important;
+        font-size: 7px !important;
+        padding: 1px !important;
+      }
+
+      /* Compact Legend Table */
+      .legend-wrapper {
+        margin-top: 2px !important;
+      }
+      .legend-table {
+        margin-bottom: 3px !important;
+        border: 1.2px solid #000 !important;
+      }
+      .legend-table th, 
+      .legend-table td {
+        padding: 1px 3px !important;
+        font-size: 8px !important;
+        line-height: 1.15 !important;
+      }
+      .legend-table th {
+        font-size: 8px !important;
+        padding: 1.5px 3px !important;
+      }
+      .legend-section-header {
+        font-size: 8.5px !important;
+        padding: 1px !important;
+      }
+      .col-sl { width: 35px !important; }
+      .col-abbr { width: 90px !important; }
+      .col-code { width: 75px !important; }
+      .col-fac { width: 210px !important; }
+
+      /* Signatures Block */
+      .signatures-block {
+        margin-top: 8px !important;
+        padding: 0 15px !important;
+        font-size: 9px !important;
+      }
+      .sig-space {
+        height: 16px !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ═════════════════════ ACTION TOOLBAR ═════════════════════ -->
+  <div class="action-toolbar" id="actionToolbar">
+    <div class="toolbar-left">
+      <div class="toolbar-title">
+        <i class="fas fa-file-invoice text-emerald-400"></i>
+        <span>Official Timetable</span>
+      </div>
+      <select class="select-class-ctrl" onchange="switchClass(this.value)">
+        {% for c in classes %}
+        <option value="{{ c.id }}" {% if c.id == current_class_id %}selected{% endif %}>
+          {{ c.name }} ({{ c.department }})
+        </option>
+        {% endfor %}
+      </select>
+
+      <!-- 1-PAGE AUTO-FIT CONTROLLER -->
+      <div style="display:flex;align-items:center;gap:6px;margin-left:10px;font-size:12px;color:#cbd5e1;">
+        <i class="fas fa-expand-arrows-alt text-emerald-400"></i>
+        <span>Page Fit:</span>
+        <select id="pageScaleSelect" class="select-class-ctrl" style="padding:5px 8px;font-size:12px;" onchange="changePageScale(this.value)">
+          <option value="auto" selected>✨ Auto-Fit 1 Page</option>
+          <option value="1.0">100% (Normal)</option>
+          <option value="0.95">95%</option>
+          <option value="0.90">90%</option>
+          <option value="0.85">85%</option>
+          <option value="0.80">80%</option>
+          <option value="0.75">75%</option>
+        </select>
+        <span class="badge" style="background:#065f46;color:#34d399;font-size:11px;padding:4px 8px;border-radius:4px;font-weight:600;">
+          <i class="fas fa-check-circle me-1"></i>1-Page Fit Guaranteed
+        </span>
+      </div>
+    </div>
+
+    <div class="toolbar-right">
+      <button class="btn-tb btn-tb-dark" onclick="openCustomizeModal()">
+        <i class="fas fa-edit"></i> Edit Details
+      </button>
+      <button class="btn-tb btn-tb-secondary" onclick="printTimetable()">
+        <i class="fas fa-print"></i> Print / PDF
+      </button>
+      <button class="btn-tb btn-tb-primary" id="downloadImgBtn" onclick="downloadAsImage()">
+        <i class="fas fa-download"></i> Download Image (PNG)
+      </button>
+      <a href="/timetable" class="btn-tb btn-tb-dark">
+        <i class="fas fa-arrow-left"></i> Back
+      </a>
+    </div>
+  </div>
+
+  <!-- ═════════════════════ PRINTABLE & CAPTURABLE TIMETABLE SHEET ═════════════════════ -->
+  <div class="timetable-sheet" id="timetableCaptureSheet">
+
+    <!-- INSTITUTION HEADER -->
+    <div class="inst-header">
+      <div class="logo-container" id="logoDisplay">
+        {% if data.institution.logo_url %}
+          <img src="{{ data.institution.logo_url }}" alt="Logo" class="college-logo-img" id="instLogoImg" />
+        {% else %}
+          <!-- Institutional Emblem Shield SVG -->
+          <svg class="college-logo-svg" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M50 8L88 24V50C88 72 50 92 50 92C50 92 12 72 12 50V24L50 8Z" fill="#1e293b" stroke="#000" stroke-width="2"/>
+            <path d="M50 16L80 28V50C80 67 50 82 50 82C50 82 20 67 20 50V28L50 16Z" fill="#0f172a"/>
+            <circle cx="50" cy="46" r="18" fill="#ffffff"/>
+            <path d="M42 45L47 50L58 39" stroke="#1e293b" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <text x="50" y="74" text-anchor="middle" fill="#ffffff" font-family="'Times New Roman', serif" font-size="11" font-weight="bold">
+              {{ data.institution.code or 'ENGG' }}
+            </text>
+          </svg>
+        {% endif %}
+      </div>
+
+      <div class="inst-title-block">
+        <div class="college-name" id="dispCollegeName">{{ data.institution.name }}</div>
+        <div class="college-address" id="dispCollegeAddress">{{ data.institution.address or 'COLLEGE ROAD, TAMIL NADU, INDIA' }}</div>
+        <div class="department-name" id="dispDeptName">{{ data.department_display }}</div>
+        <div class="table-title" id="dispTableTitle">
+          Class Time Table – {% if data.class.semester %}{% if data.class.semester % 2 != 0 %}Odd{% else %}Even{% endif %} Semester – {% endif %}{{ data.class.academic_year or '2026-27' }} - Semester {{ data.class.semester or 1 }}
+        </div>
+      </div>
+
+      <div class="logo-container" style="visibility:hidden;"></div>
+    </div>
+
+    <!-- SUBHEADER METADATA ROW -->
+    <div class="meta-details-bar">
+      <div class="meta-item">
+        Venue: <span id="dispVenue">{{ data.class.venue or 'Room ' ~ (100 + data.class.id) }}</span>
+      </div>
+      <div class="meta-item">
+        Class: <span id="dispClass">{{ data.class.name }} ({{ data.class.department }})</span>
+      </div>
+      <div class="meta-item">
+        w.e.f. <span id="dispWef">16.07.2026</span>
+      </div>
+      <div class="meta-item">
+        Class Strength: <span id="dispStrength">{{ data.class.strength or 60 }}</span>
+      </div>
+    </div>
+
+    <!-- TIMETABLE GRID TABLE -->
+    <table class="timetable-grid-table">
+      <thead>
+        <tr>
+          <th style="width: 85px;">Day / Session</th>
+          {% for s in data.period_slots %}
+          <th>
+            {{ s.label }}<br/>
+            <span style="font-weight: normal; font-size: 10px;">{{ s.start_time }} - {{ s.end_time }}</span>
+          </th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for day in data.day_rows %}
+        <tr>
+          <td class="day-cell">{{ day.name }}</td>
+          {% for item in day.slots %}
+            {% if item.type == 'break' %}
+              <td class="break-cell" title="{{ item.label }}">{{ item.label }}</td>
+            {% elif item.type == 'empty' %}
+              <td {% if item.colspan > 1 %}colspan="{{ item.colspan }}"{% endif %}></td>
+            {% else %}
+              {% if item.colspan > 1 %}
+                <td colspan="{{ item.colspan }}" class="lab-merged-td">
+                  <div class="lab-arrow-span">
+                    <span class="arrow-line arrow-left-line"></span>
+                    <span class="lab-abbr-text">{{ item.abbreviation }}</span>
+                    <span class="arrow-line arrow-right-line"></span>
+                  </div>
+                </td>
+              {% else %}
+                <td>
+                  <span class="subject-abbr">{{ item.abbreviation }}</span>
+                </td>
+              {% endif %}
+            {% endif %}
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <!-- LEGEND TABLES -->
+    <div class="legend-wrapper">
+      <table class="legend-table">
+        <thead>
+          <tr>
+            <th class="col-sl">Sl. No.</th>
+            <th class="col-abbr">Course Abbreviation</th>
+            <th class="col-code">Course Code</th>
+            <th class="col-name">Course Name</th>
+            <th class="col-fac">Faculty</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- THEORY COURSES -->
+          <tr>
+            <td colspan="5" class="legend-section-header">Theory Courses</td>
+          </tr>
+          {% for c in data.theory_courses %}
+          <tr>
+            <td class="col-sl">{{ loop.index }}.</td>
+            <td class="col-abbr">{{ c.abbr }}</td>
+            <td class="col-code">{{ c.code }}</td>
+            <td class="col-name">{{ c.name }}</td>
+            <td class="col-fac">{{ c.faculty_str }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" style="text-align:center; color:#666;">No theory courses scheduled</td></tr>
+          {% endfor %}
+
+          <!-- LABORATORY COURSES -->
+          <tr>
+            <td colspan="5" class="legend-section-header">Laboratory Courses</td>
+          </tr>
+          {% for c in data.lab_courses %}
+          <tr>
+            <td class="col-sl">{{ data.theory_courses|length + loop.index }}.</td>
+            <td class="col-abbr">{{ c.abbr }}</td>
+            <td class="col-code">{{ c.code }}</td>
+            <td class="col-name">{{ c.name }}</td>
+            <td class="col-fac">{{ c.faculty_str }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" style="text-align:center; color:#666;">No laboratory courses scheduled</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- SIGNATURES BLOCK -->
+    <div class="signatures-block">
+      <div class="sig-item">
+        <div class="sig-space"></div>
+        <span>Time-table Coordinator</span>
+      </div>
+      <div class="sig-item">
+        <div class="sig-space"></div>
+        <span>Verified by</span>
+      </div>
+      <div class="sig-item">
+        <div class="sig-space"></div>
+        <span>HoD</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═════════════════════ CUSTOMIZE MODAL ═════════════════════ -->
+  <div class="modal-overlay" id="customizeModal">
+    <div class="modal-card">
+      <h3><i class="fas fa-sliders-h text-indigo-600"></i> Customize Timetable Details</h3>
+      
+      <div class="form-group">
+        <label>College Name</label>
+        <input type="text" class="form-ctrl" id="inpCollegeName" value="{{ data.institution.name }}" />
+      </div>
+
+      <div class="form-group">
+        <label>College Address / Location</label>
+        <input type="text" class="form-ctrl" id="inpCollegeAddress" value="{{ data.institution.address or 'COIMBATORE - 641062' }}" />
+      </div>
+
+      <div class="form-group">
+        <label>College Logo Image URL (or leave blank for Shield)</label>
+        <input type="text" class="form-ctrl" id="inpLogoUrl" value="{{ data.institution.logo_url or '' }}" placeholder="https://.../logo.png" />
+      </div>
+
+      <div class="form-group">
+        <label>Department Name</label>
+        <input type="text" class="form-ctrl" id="inpDeptName" value="{{ data.department_display }}" />
+      </div>
+
+      <div style="display: flex; gap: 10px;">
+        <div class="form-group" style="flex: 1;">
+          <label>Venue / Room</label>
+          <input type="text" class="form-ctrl" id="inpVenue" value="{{ data.class.venue or 'Room ' ~ (100 + data.class.id) }}" />
+        </div>
+        <div class="form-group" style="flex: 1;">
+          <label>w.e.f. Date</label>
+          <input type="text" class="form-ctrl" id="inpWef" value="16.07.2026" />
+        </div>
+        <div class="form-group" style="flex: 1;">
+          <label>Class Strength</label>
+          <input type="number" class="form-ctrl" id="inpStrength" value="{{ data.class.strength or 60 }}" />
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-tb btn-tb-dark" onclick="closeCustomizeModal()">Cancel</button>
+        <button class="btn-tb btn-tb-primary" onclick="applyCustomizations()">Apply & Update</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentScale = 'auto';
+
+    function switchClass(classId) {
+      if (classId) {
+        window.location.href = '/timetable/print/' + classId;
+      }
+    }
+
+    function openCustomizeModal() {
+      document.getElementById('customizeModal').style.display = 'flex';
+    }
+
+    function closeCustomizeModal() {
+      document.getElementById('customizeModal').style.display = 'none';
+    }
+
+    function applyCustomizations() {
+      const colName = document.getElementById('inpCollegeName').value;
+      const colAddr = document.getElementById('inpCollegeAddress').value;
+      const logoUrl = document.getElementById('inpLogoUrl').value;
+      const deptName = document.getElementById('inpDeptName').value;
+      const venue = document.getElementById('inpVenue').value;
+      const wef = document.getElementById('inpWef').value;
+      const strength = document.getElementById('inpStrength').value;
+
+      document.getElementById('dispCollegeName').textContent = colName;
+      document.getElementById('dispCollegeAddress').textContent = colAddr;
+      document.getElementById('dispDeptName').textContent = deptName;
+      document.getElementById('dispVenue').textContent = venue;
+      document.getElementById('dispWef').textContent = wef;
+      document.getElementById('dispStrength').textContent = strength;
+
+      if (logoUrl) {
+        document.getElementById('logoDisplay').innerHTML = `<img src="${logoUrl}" alt="Logo" class="college-logo-img" />`;
+      }
+
+      // Persist to backend
+      fetch('/api/settings/institution', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          name: colName,
+          address: colAddr,
+          logo_url: logoUrl
+        })
+      }).catch(e => console.log('Saved locally'));
+
+      closeCustomizeModal();
+      applyPageFit();
+    }
+
+    // ── 1-PAGE DYNAMIC AUTO-FIT RESIZE ENGINE ───────────────────────
+    function calculateBestScale() {
+      const sheet = document.getElementById('timetableCaptureSheet');
+      if (!sheet) return 1.0;
+
+      // Reset transform temporarily to measure natural unscaled height
+      const prevZoom = sheet.style.zoom;
+      const prevTransform = sheet.style.transform;
+      sheet.style.zoom = '1';
+      sheet.style.transform = 'none';
+
+      // Standard A4 landscape print height is ~720px at 96dpi (210mm - 12mm margins)
+      const targetPrintHeight = 720;
+      const actualHeight = sheet.scrollHeight || sheet.offsetHeight;
+
+      // Restore
+      sheet.style.zoom = prevZoom;
+      sheet.style.transform = prevTransform;
+
+      if (actualHeight > targetPrintHeight) {
+        // Compute ratio needed to comfortably fit in one page
+        const ratio = (targetPrintHeight - 10) / actualHeight;
+        // Clamp scale between 0.65 and 1.0
+        return Math.min(1.0, Math.max(0.65, Math.floor(ratio * 100) / 100));
+      }
+      return 1.0;
+    }
+
+    function changePageScale(val) {
+      currentScale = val;
+      applyPageFit();
+    }
+
+    function applyPageFit() {
+      const sheet = document.getElementById('timetableCaptureSheet');
+      if (!sheet) return;
+
+      if (currentScale === 'auto') {
+        const bestScale = calculateBestScale();
+        sheet.style.zoom = bestScale;
+        sheet.dataset.currentScale = bestScale;
+      } else {
+        sheet.style.zoom = currentScale;
+        sheet.dataset.currentScale = currentScale;
+      }
+    }
+
+    function printTimetable() {
+      // Ensure best scale is applied for print
+      applyPageFit();
+      setTimeout(() => {
+        window.print();
+      }, 80);
+    }
+
+    window.addEventListener('beforeprint', () => {
+      applyPageFit();
+    });
+
+    window.addEventListener('afterprint', () => {
+      applyPageFit();
+    });
+
+    window.addEventListener('DOMContentLoaded', () => {
+      applyPageFit();
+    });
+
+    async function downloadAsImage() {
+      const btn = document.getElementById('downloadImgBtn');
+      const origText = btn.innerHTML;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating Image...';
+      btn.disabled = true;
+
+      const sheet = document.getElementById('timetableCaptureSheet');
+      const savedZoom = sheet.style.zoom;
+      sheet.style.zoom = '1'; // Capture full resolution
+
+      try {
+        // Use html2canvas with scale 2.5 for crisp print-ready PNG
+        const canvas = await html2canvas(sheet, {
+          scale: 2.2,
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff'
+        });
+
+        // Trigger download
+        const imgData = canvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        const className = "{{ data.class.name }}".replace(/[^a-zA-Z0-9_-]/g, '_');
+        const deptName = "{{ data.class.department }}".replace(/[^a-zA-Z0-9_-]/g, '_');
+        link.download = `Timetable_${className}_${deptName}.png`;
+        link.href = imgData;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (err) {
+        console.error("Image generation failed:", err);
+        alert("Could not generate image automatically. You can use Print -> Save as PDF.");
+      } finally {
+        sheet.style.zoom = savedZoom; // Restore zoom
+        btn.innerHTML = origText;
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>

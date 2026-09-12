@@ -1,9 +1,39 @@
 {% extends "base.html" %}
-{% block title %}Staff – EduSchedule Pro{% endblock %}
+{% block title %}Staff – SchedHub{% endblock %}
 {% block page_title %}Staff Management{% endblock %}
-{% block topbar_actions %}<button class="btn-primary-sm" onclick="openAddModal()"><i class="fas fa-plus me-1"></i>Add Staff</button>{% endblock %}
+{% block topbar_actions %}
+  {% if current_user.role in ('admin', 'creator') %}
+    <button class="btn-primary-sm" onclick="openAddModal()"><i class="fas fa-plus me-1"></i>Add Staff</button>
+  {% endif %}
+{% endblock %}
 {% block content %}
-<div class="search-bar-row"><div class="search-wrap"><i class="fas fa-search"></i><input type="text" id="staffSearch" class="search-input" placeholder="Search staff by name or department…" oninput="filterCards()"/></div><span class="result-count" id="resultCount">{{ staff|length }} staff</span></div>
+<!-- Department Filter Chips -->
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+  <div class="d-flex flex-wrap gap-2" id="deptFilterTabs">
+    <button type="button" class="btn btn-sm btn-dark px-3 py-1 dept-tab active" data-dept="all" onclick="setDeptFilter('all', this)">
+      All Departments
+    </button>
+    {% for d in departments %}
+    <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1 dept-tab" data-dept="{{ d.code|lower }}" onclick="setDeptFilter('{{ d.code|lower }}', this)">
+      {{ d.code }}
+    </button>
+    {% endfor %}
+  </div>
+  {% if current_user.role in ('admin', 'creator') %}
+  <span class="badge bg-indigo-subtle text-primary border px-2 py-1" style="font-size:11.5px;">
+    <i class="fas fa-user-check me-1"></i> Staff Allocation & Management
+  </span>
+  {% endif %}
+</div>
+
+<div class="search-bar-row">
+  <div class="search-wrap">
+    <i class="fas fa-search"></i>
+    <input type="text" id="staffSearch" class="search-input" placeholder="Search staff by name or department…" oninput="filterCards()"/>
+  </div>
+  <span class="result-count" id="resultCount">{{ staff|length }} staff</span>
+</div>
+
 <div class="cards-grid" id="staffGrid">
 {% for s in staff %}
 <div class="staff-card" id="sc-{{ s.id }}" data-name="{{ s.name|lower }}" data-dept="{{ s.department|lower }}">
@@ -11,9 +41,9 @@
     <div class="sc-ava">{{ s.name[0] }}</div>
     <div class="sc-meta"><h4>{{ s.name }}</h4><span class="dept-tag">{{ s.department }}</span></div>
     <div class="sc-actions">
-      {% if current_user.role == "admin" %}
-      <button class="btn-icon-sm blue" onclick="editStaff({{ s.id }})"><i class="fas fa-edit"></i></button>
-      <button class="btn-icon-sm red" onclick="delStaff({{ s.id }})"><i class="fas fa-trash"></i></button>
+      {% if current_user.role in ('admin', 'creator') %}
+      <button class="btn-icon-sm blue" data-id="{{ s.id }}" onclick="editStaff(parseInt(this.dataset.id))" title="Edit Staff"><i class="fas fa-edit"></i></button>
+      <button class="btn-icon-sm red" data-id="{{ s.id }}" onclick="delStaff(parseInt(this.dataset.id))" title="Delete Staff"><i class="fas fa-trash"></i></button>
       {% endif %}
     </div>
   </div>
@@ -22,7 +52,7 @@
     <div class="sc-stat"><i class="fas fa-clock"></i>{{ s.allocated_periods }}/{{ s.max_periods_per_week }} periods</div>
   </div>
   <div class="wl-bar-wrap">
-    <div class="wl-bar"><div class="wl-fill {% if s.pct>90 %}danger{% elif s.pct>70 %}warn{% else %}ok{% endif %}" style="width:{{ s.pct }}%"></div></div>
+    <div class="wl-bar"><div class="wl-fill {{ 'danger' if s.pct > 90 else ('warn' if s.pct > 70 else 'ok') }}" data-pct="{{ s.pct }}"></div></div>
     <span class="wl-pct">{{ s.pct }}%</span>
   </div>
   <div class="tag-row">
@@ -35,7 +65,15 @@
     <span class="small text-muted">{{ s.available_days or 'Mon-Fri' }}</span>
   </div>
 </div>
-{% else %}<div class="empty-state"><i class="fas fa-users"></i><p>No staff yet. Add your first staff member.</p></div>{% endfor %}
+{% else %}
+<div class="empty-state">
+  <i class="fas fa-users"></i>
+  <p>No staff registered yet.</p>
+  {% if current_user.role in ('admin', 'creator') %}
+  <button class="btn btn-sm btn-primary mt-2" onclick="openAddModal()"><i class="fas fa-plus me-1"></i>Add First Staff</button>
+  {% endif %}
+</div>
+{% endfor %}
 </div>
 
 <div class="modal fade" id="staffModal" tabindex="-1">
@@ -45,7 +83,13 @@
       <input type="hidden" id="staffId"/>
       <div class="row g-3">
         <div class="col-md-6"><label class="form-label fw-600">Full Name *</label><input type="text" class="ctrl" id="sName" required/></div>
-        <div class="col-md-6"><label class="form-label fw-600">Department *</label><select class="ctrl" id="sDept"><option>CSE</option><option>ECE</option><option>MECH</option><option>CIVIL</option><option>COMMON</option><option>OTHER</option></select></div>
+        <div class="col-md-6"><label class="form-label fw-600">Department *</label>
+          <select class="ctrl" id="sDept">
+            {% for d in departments %}
+            <option value="{{ d.code }}">{{ d.code }} — {{ d.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
         <div class="col-md-4"><label class="form-label fw-600">Experience (yrs)</label><input type="number" class="ctrl" id="sExp" min="0" value="0"/></div>
         <div class="col-md-4"><label class="form-label fw-600">Max Periods/Week</label><input type="number" class="ctrl" id="sMax" min="1" value="20"/></div>
         <div class="col-md-4"><label class="form-label fw-600">Email</label><input type="email" class="ctrl" id="sEmail"/></div>
@@ -71,24 +115,62 @@
 {% endblock %}
 {% block scripts %}
 <script>
-const staffModal=new bootstrap.Modal(document.getElementById('staffModal'));
-function filterCards(){
-  const q=document.getElementById('staffSearch').value.toLowerCase();
-  let n=0;
-  document.querySelectorAll('.staff-card').forEach(c=>{
-    const show=!q||c.dataset.name.includes(q)||c.dataset.dept.includes(q);
-    c.style.display=show?'':'none'; if(show)n++;
+const staffModal = new bootstrap.Modal(document.getElementById('staffModal'));
+let currentDeptFilter = 'all';
+
+function setDeptFilter(dept, btn) {
+  currentDeptFilter = dept.toLowerCase();
+  document.querySelectorAll('.dept-tab').forEach(b => {
+    b.classList.remove('btn-dark', 'active');
+    b.classList.add('btn-outline-secondary');
   });
-  document.getElementById('resultCount').textContent=n+' staff';
+  btn.classList.remove('btn-outline-secondary');
+  btn.classList.add('btn-dark', 'active');
+  filterCards();
 }
+
+function filterCards(){
+  const q = document.getElementById('staffSearch').value.toLowerCase();
+  let n = 0;
+  document.querySelectorAll('.staff-card').forEach(c => {
+    const nameMatch = !q || c.dataset.name.includes(q) || c.dataset.dept.includes(q);
+    const deptMatch = (currentDeptFilter === 'all') || (c.dataset.dept === currentDeptFilter);
+    const show = nameMatch && deptMatch;
+    c.style.display = show ? '' : 'none'; 
+    if (show) n++;
+  });
+  document.getElementById('resultCount').textContent = n + ' staff';
+}
+
 function openAddModal(){
-  document.getElementById('staffModalTitle').textContent='Add Staff';
-  document.getElementById('staffId').value='';
-  ['sName','sEmail'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('sDept').value='CSE';
-  document.getElementById('sExp').value=0; document.getElementById('sMax').value=20;
-  document.querySelectorAll('.subj-cb').forEach(c=>c.checked=false);
-  document.querySelectorAll('.sday-cb').forEach(c=>{c.checked=['Mon','Tue','Wed','Thu','Fri'].includes(c.value);c.closest('.day-chip').classList.toggle('active',c.checked);});
+  document.getElementById('staffModalTitle').textContent = 'Add Staff';
+  document.getElementById('staffId').value = '';
+  ['sName','sEmail'].forEach(id => document.getElementById(id).value = '');
+  
+  // Default to active department if one is selected
+  const deptSelect = document.getElementById('sDept');
+  if (currentDeptFilter !== 'all') {
+    const uppercaseDept = currentDeptFilter.toUpperCase();
+    let found = false;
+    for (let opt of deptSelect.options) {
+      if (opt.value.toUpperCase() === uppercaseDept) {
+        deptSelect.value = opt.value;
+        found = true;
+        break;
+      }
+    }
+    if (!found) deptSelect.value = 'CSE';
+  } else {
+    deptSelect.value = 'CSE';
+  }
+
+  document.getElementById('sExp').value = 0; 
+  document.getElementById('sMax').value = 20;
+  document.querySelectorAll('.subj-cb').forEach(c => c.checked = false);
+  document.querySelectorAll('.sday-cb').forEach(c => {
+    c.checked = ['Mon','Tue','Wed','Thu','Fri'].includes(c.value);
+    c.closest('.day-chip').classList.toggle('active', c.checked);
+  });
   staffModal.show();
 }
 async function editStaff(id){
@@ -115,5 +197,6 @@ async function saveStaff(){
   if(d.success){staffModal.hide();location.reload();}
 }
 async function delStaff(id){if(!confirm('Delete staff member?'))return;await fetch('/api/staff/'+id,{method:'DELETE'});location.reload();}
+document.querySelectorAll('.wl-fill[data-pct]').forEach(function(el){ el.style.width = el.getAttribute('data-pct') + '%'; });
 </script>
 {% endblock %}

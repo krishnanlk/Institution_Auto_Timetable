@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}Rooms – SchedHub{% endblock %}
+{% block page_title %}Rooms{% endblock %}
+{% block topbar_actions %}
+{% if current_user.role in ('admin', 'creator') %}
+<button class="btn-primary-sm" onclick="openAddRoom()">
+  <i class="fas fa-plus me-1"></i>Add Room
+</button>
+{% endif %}
+{% endblock %}
+{% block content %}
+
+<div class="info-note mb-3">
+  <i class="fas fa-info-circle me-1"></i>
+  Rooms are optional. If configured, the system can prevent lab room double-booking during timetable generation.
+</div>
+
+<div class="table-card">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Room Name</th>
+        <th>Type</th>
+        <th>Capacity</th>
+        {% if current_user.role in ('admin', 'creator') %}<th>Actions</th>{% endif %}
+      </tr>
+    </thead>
+    <tbody id="roomsTableBody">
+      {% for r in rooms %}
+      <tr id="room-row-{{ r.id }}">
+        <td><strong>{{ r.name }}</strong></td>
+        <td>
+          {% if r.room_type == 'lab' %}
+            <span class="badge bg-indigo text-white">🔬 Lab</span>
+          {% elif r.room_type == 'seminar' %}
+            <span class="badge bg-cyan text-white">🎤 Seminar</span>
+          {% else %}
+            <span class="badge bg-secondary text-white">🏫 Classroom</span>
+          {% endif %}
+        </td>
+        <td>{{ r.capacity }} seats</td>
+        {% if current_user.role in ('admin', 'creator') %}
+        <td>
+          <button class="btn-icon" onclick="openEditRoom({{ r.id }}, '{{ r.name }}', {{ r.capacity }}, '{{ r.room_type }}')" title="Edit">
+            <i class="fas fa-pen"></i>
+          </button>
+          <button class="btn-icon btn-icon-danger" onclick="deleteRoom({{ r.id }}, '{{ r.name }}')" title="Delete">
+            <i class="fas fa-trash"></i>
+          </button>
+        </td>
+        {% endif %}
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="text-center text-muted py-4">No rooms added yet. Click "Add Room" to get started.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Add/Edit Room Modal -->
+<div class="modal fade" id="roomModal" tabindex="-1">
+  <div class="modal-dialog modal-sm"><div class="modal-content cm">
+    <div class="cm-head">
+      <h5 id="roomModalTitle"><i class="fas fa-building me-2"></i>Add Room</h5>
+      <button class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="roomId"/>
+      <div class="mb-3">
+        <label class="form-label fw-600">Room Name *</label>
+        <input type="text" class="ctrl" id="roomName" placeholder="e.g. CSE Lab 1, Room 101"/>
+      </div>
+      <div class="mb-3">
+        <label class="form-label fw-600">Room Type</label>
+        <select class="ctrl" id="roomType">
+          <option value="classroom">🏫 Classroom</option>
+          <option value="lab">🔬 Lab</option>
+          <option value="seminar">🎤 Seminar Hall</option>
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label fw-600">Capacity (seats)</label>
+        <input type="number" class="ctrl" id="roomCapacity" value="60" min="1" max="1000"/>
+      </div>
+      <div id="roomError" class="text-danger small" style="display:none"></div>
+    </div>
+    <div class="cm-foot">
+      <button class="btn-cancel" data-bs-dismiss="modal">Cancel</button>
+      <button class="btn-save" onclick="saveRoom()">
+        <i class="fas fa-save me-1"></i>Save
+      </button>
+    </div>
+  </div></div>
+</div>
+
+<script>
+let editingRoomId = null;
+
+function openAddRoom() {
+  editingRoomId = null;
+  document.getElementById('roomModalTitle').innerHTML = '<i class="fas fa-plus me-2"></i>Add Room';
+  document.getElementById('roomId').value       = '';
+  document.getElementById('roomName').value     = '';
+  document.getElementById('roomType').value     = 'classroom';
+  document.getElementById('roomCapacity').value = '60';
+  document.getElementById('roomError').style.display = 'none';
+  new bootstrap.Modal(document.getElementById('roomModal')).show();
+}
+
+function openEditRoom(id, name, capacity, type) {
+  editingRoomId = id;
+  document.getElementById('roomModalTitle').innerHTML = '<i class="fas fa-pen me-2"></i>Edit Room';
+  document.getElementById('roomId').value       = id;
+  document.getElementById('roomName').value     = name;
+  document.getElementById('roomType').value     = type;
+  document.getElementById('roomCapacity').value = capacity;
+  document.getElementById('roomError').style.display = 'none';
+  new bootstrap.Modal(document.getElementById('roomModal')).show();
+}
+
+async function saveRoom() {
+  const name     = document.getElementById('roomName').value.trim();
+  const type     = document.getElementById('roomType').value;
+  const capacity = parseInt(document.getElementById('roomCapacity').value);
+  const errEl    = document.getElementById('roomError');
+
+  if (!name) { errEl.textContent = 'Room name is required.'; errEl.style.display = ''; return; }
+  errEl.style.display = 'none';
+
+  const body = {name, room_type: type, capacity};
+  let res;
+  if (editingRoomId) {
+    res = await fetch(`/api/rooms/${editingRoomId}`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+  } else {
+    res = await fetch('/api/rooms', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+  }
+
+  const data = await res.json();
+  if (data.success) {
+    bootstrap.Modal.getInstance(document.getElementById('roomModal'))?.hide();
+    location.reload();
+  } else {
+    errEl.textContent = data.error || 'Save failed';
+    errEl.style.display = '';
+  }
+}
+
+async function deleteRoom(id, name) {
+  if (!confirm(`Delete room "${name}"? This cannot be undone.`)) return;
+  const res  = await fetch(`/api/rooms/${id}`, {method: 'DELETE'});
+  const data = await res.json();
+  if (data.success) {
+    const row = document.getElementById(`room-row-${id}`);
+    if (row) row.remove();
+  }
+}
+</script>
+{% endblock %}

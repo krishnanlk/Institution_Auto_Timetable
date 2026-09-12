@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Dashboard – EduSchedule Pro{% endblock %}
+{% block title %}Dashboard – SchedHub{% endblock %}
 {% block page_title %}Dashboard{% endblock %}
 {% block content %}
 <div class="stats-grid">
-  <div class="stat-card blue"><div class="stat-icon"><i class="fas fa-users"></i></div><div class="stat-body"><div class="stat-num">{{ total_staff }}</div><div class="stat-lbl">Staff Members</div></div></div>
-  <div class="stat-card green"><div class="stat-icon"><i class="fas fa-book-open"></i></div><div class="stat-body"><div class="stat-num">{{ total_subjects }}</div><div class="stat-lbl">Subjects</div></div></div>
-  <div class="stat-card violet"><div class="stat-icon"><i class="fas fa-door-open"></i></div><div class="stat-body"><div class="stat-num">{{ total_classes }}</div><div class="stat-lbl">Classes</div></div></div>
+  <div class="stat-card blue"><div class="stat-icon"><i class="fas fa-users"></i></div><div class="stat-body"><div class="stat-num">{{ stats.staff }}</div><div class="stat-lbl">Staff Members</div></div></div>
+  <div class="stat-card green"><div class="stat-icon"><i class="fas fa-book-open"></i></div><div class="stat-body"><div class="stat-num">{{ stats.subjects }}</div><div class="stat-lbl">Subjects</div></div></div>
+  <div class="stat-card violet"><div class="stat-icon"><i class="fas fa-door-open"></i></div><div class="stat-body"><div class="stat-num">{{ stats.classes }}</div><div class="stat-lbl">Classes</div></div></div>
   <div class="stat-card amber"><div class="stat-icon"><i class="fas fa-clock"></i></div><div class="stat-body"><div class="stat-num">{{ total_slots }}</div><div class="stat-lbl">Scheduled Periods</div></div></div>
 </div>
 
@@ -26,13 +26,13 @@
   </div>
 </div>
 
-{% if tt_history %}
+{% if recent_timetables %}
 <div class="card-panel mt-4">
   <div class="panel-head"><h3>Timetable History</h3><span class="panel-sub">Recent generations</span></div>
   <table class="data-table">
     <thead><tr><th>Name</th><th>Generated</th><th>Conflicts</th><th>Status</th></tr></thead>
     <tbody>
-    {% for tt in tt_history %}
+    {% for tt in recent_timetables %}
     <tr>
       <td><strong>{{ tt.name }}</strong></td>
       <td>{{ tt.generated_at }}</td>

@@ -1,0 +1,29 @@
+# Virtual environment
+.venv/
+env/
+venv/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Git
+.git/
+.gitignore
+
+# Environment variables (NEVER expose local secrets to deployment bundle)
+.env
+.env.local
+
+# Temporary local databases & logs
+*.db
+edupro_temp*.db
+*.log
+scratch/
+.tempmediaStorage/
+.user_uploaded/
+.system_generated/
