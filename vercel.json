@@ -5,7 +5,7 @@
       "destination": "/static/$1"
     },
     {
-      "source": "/((?!api/).*)",
+      "source": "/((?!api/index).*)",
       "destination": "/api/index"
     }
   ]

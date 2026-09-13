@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS institution (
     phone       TEXT,
     logo_text   TEXT DEFAULT '',
     logo_url    TEXT DEFAULT '',
+    institution_type TEXT DEFAULT 'college',
     created_at  TEXT DEFAULT (NOW()::TEXT)
 );
 
@@ -93,6 +94,8 @@ CREATE TABLE IF NOT EXISTS subject (
     difficulty_level INTEGER DEFAULT 3,
     is_lab           INTEGER DEFAULT 0,
     lab_duration     INTEGER DEFAULT 2,
+    lab_staff2_id    INTEGER REFERENCES staff(id) ON DELETE SET NULL,
+    is_mentor_meeting INTEGER DEFAULT 0,
     created_at       TEXT DEFAULT (NOW()::TEXT)
 );
 
@@ -115,6 +118,14 @@ CREATE TABLE IF NOT EXISTS class_section (
     academic_year   TEXT DEFAULT '2026-27',
     created_at      TEXT DEFAULT (NOW()::TEXT),
     UNIQUE(institution_id, name)
+);
+
+-- ── Class Mentors ──────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS class_mentor (
+    class_id      INTEGER NOT NULL REFERENCES class_section(id) ON DELETE CASCADE,
+    staff_id      INTEGER NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+    mentor_order  INTEGER DEFAULT 1,
+    PRIMARY KEY (class_id, staff_id)
 );
 
 -- ── Class ↔ Subjects ───────────────────────────────────────────────────
@@ -145,6 +156,7 @@ CREATE TABLE IF NOT EXISTS timetable_slot (
     class_id        INTEGER REFERENCES class_section(id) ON DELETE CASCADE,
     subject_id      INTEGER REFERENCES subject(id) ON DELETE CASCADE,
     staff_id        INTEGER REFERENCES staff(id) ON DELETE CASCADE,
+    staff2_id       INTEGER REFERENCES staff(id) ON DELETE SET NULL,
     room_id         INTEGER REFERENCES rooms(id) ON DELETE SET NULL,
     is_manual_edit  INTEGER DEFAULT 0,
     created_at      TEXT DEFAULT (NOW()::TEXT)

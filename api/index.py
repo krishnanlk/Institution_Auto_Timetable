@@ -24,6 +24,8 @@ class VercelWSGIWrapper:
             clean = matched_path.split('?')[0]
             if clean and not clean.startswith('/api/index'):
                 environ['PATH_INFO'] = clean
+            if '?' in matched_path and not environ.get('QUERY_STRING'):
+                environ['QUERY_STRING'] = matched_path.split('?', 1)[1]
         
         # Strip /api/index prefix if Vercel routed to the function directly
         path_info = environ.get('PATH_INFO', '')
