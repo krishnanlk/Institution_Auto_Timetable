@@ -52,6 +52,9 @@ inject_user(app)
 def inst_id():
     return session.get("institution_id")
 
+@app.errorhandler(404)
+def page_not_found(e):
+    return f"DEBUG 404: request.path='{request.path}' PATH_INFO='{request.environ.get('PATH_INFO')}' QUERY_STRING='{request.environ.get('QUERY_STRING')}'", 404
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ROOT
