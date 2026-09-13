@@ -58,35 +58,37 @@
 
     <div class="panel-body p-4">
       <!-- Regulation Pills with Smooth Sliding Blue Glider -->
-      <div class="mb-3 d-inline-block">
-        <div class="reg-segmented-track" id="regTrack">
-          <div class="reg-glider" id="regGlider"></div>
-          <button type="button" class="reg-tab-btn active" id="btnReg_R2021" onclick="switchRegulationTab('R2021')">
-            <span class="reg-tab-icon"><i class="fas fa-check-circle"></i></span>
-            <span class="reg-tab-text">R2021 (CBCS Affiliated)</span>
-          </button>
-          <button type="button" class="reg-tab-btn" id="btnReg_R2023" onclick="switchRegulationTab('R2023')">
-            <span class="reg-tab-icon"><i class="fas fa-check-circle"></i></span>
-            <span class="reg-tab-text">R2023 (Autonomous / AICTE)</span>
-          </button>
-          <button type="button" class="reg-tab-btn" id="btnReg_R2025" onclick="switchRegulationTab('R2025')">
-            <span class="reg-tab-icon"><i class="fas fa-check-circle"></i></span>
-            <span class="reg-tab-text">R2025 (NextGen AI & Industry 5.0)</span>
-          </button>
+      <div class="mb-3 w-100">
+        <div class="reg-track-scroll-wrapper">
+          <div class="reg-segmented-track" id="regTrack">
+            <div class="reg-glider" id="regGlider"></div>
+            <button type="button" class="reg-tab-btn active" id="btnReg_R2021" onclick="switchRegulationTab('R2021')">
+              <span class="reg-tab-icon"><i class="fas fa-check-circle"></i></span>
+              <span class="reg-tab-text">R2021<span class="d-none d-sm-inline"> (CBCS Affiliated)</span></span>
+            </button>
+            <button type="button" class="reg-tab-btn" id="btnReg_R2023" onclick="switchRegulationTab('R2023')">
+              <span class="reg-tab-icon"><i class="fas fa-check-circle"></i></span>
+              <span class="reg-tab-text">R2023<span class="d-none d-sm-inline"> (Autonomous / AICTE)</span></span>
+            </button>
+            <button type="button" class="reg-tab-btn" id="btnReg_R2025" onclick="switchRegulationTab('R2025')">
+              <span class="reg-tab-icon"><i class="fas fa-check-circle"></i></span>
+              <span class="reg-tab-text">R2025<span class="d-none d-sm-inline"> (NextGen AI & Industry 5.0)</span></span>
+            </button>
+          </div>
         </div>
       </div>
 
       <!-- Filter Bar -->
       <div class="syllabus-filter-bar">
-        <div class="row g-3 align-items-end">
-          <div class="col-xl-2 col-lg-2 col-md-3">
+        <div class="row g-2 g-md-3 align-items-end">
+          <div class="col-12 col-sm-4 col-md-3 col-xl-2">
             <label class="form-label fw-bold small text-muted mb-1">Degree</label>
             <select class="form-select syllabus-select" id="navDegree" onchange="onNavFilterChange('degree')">
               <option value="B.E." selected>B.E.</option>
               <option value="B.Tech.">B.Tech.</option>
             </select>
           </div>
-          <div class="col-xl-4 col-lg-4 col-md-5">
+          <div class="col-12 col-sm-8 col-md-5 col-xl-4">
             <label class="form-label fw-bold small text-muted mb-1">Department / Branch</label>
             <select class="form-select syllabus-select" id="navDept" onchange="onNavFilterChange('dept')">
               <option value="CSE" selected>CSE — Computer Science & Engineering</option>
@@ -101,7 +103,7 @@
               <option value="CYBER">CYBER — Cyber Security</option>
             </select>
           </div>
-          <div class="col-xl-3 col-lg-3 col-md-4">
+          <div class="col-12 col-sm-6 col-md-4 col-xl-3">
             <label class="form-label fw-bold small text-muted mb-1">Semester</label>
             <select class="form-select syllabus-select" id="navSemester" onchange="onNavFilterChange('semester')">
               <option value="Semester 1" selected>Semester 1 (1st Year Foundation)</option>
@@ -114,7 +116,7 @@
               <option value="Semester 8">Semester 8 (Project / Internship)</option>
             </select>
           </div>
-          <div class="col-xl-3 col-lg-3 col-md-12">
+          <div class="col-12 col-sm-6 col-md-12 col-xl-3">
             <button class="btn btn-load-curriculum w-100 fw-bold" id="btnLoadCurriculum" onclick="loadCurriculumFromNav()">
               <i class="fas fa-bolt me-1"></i> Load Curriculum
             </button>
@@ -184,38 +186,38 @@
     <div class="panel-body p-4">
       <!-- Class Configuration Header -->
       <div class="syllabus-filter-bar mb-3 p-3">
-      <div class="row g-3 align-items-end">
-        <div class="col-md-4">
-          <label class="form-label fw-bold small">Target Class / Section Name *</label>
-          <input type="text" class="form-control form-control-sm" id="importClassName" placeholder="e.g. II CSE - Section A"/>
-        </div>
-        <div class="col-md-3">
-          <label class="form-label fw-bold small">Department *</label>
-          <select class="form-select form-select-sm" id="importDept">
-            <option value="CSE">CSE (Computer Science)</option>
-            <option value="IT">IT (Information Tech)</option>
-            <option value="AIDS">AI & DS (AI & Data Science)</option>
-            <option value="ECE">ECE (Electronics & Comm)</option>
-            <option value="EEE">EEE (Electrical & Electronics)</option>
-            <option value="MECH">MECH (Mechanical)</option>
-            <option value="CIVIL">CIVIL (Civil Engg)</option>
-            <option value="BME">BME (Biomedical Engg)</option>
-            <option value="CSBS">CSBS (CS & Business Systems)</option>
-            <option value="CYBER">CYBER (Cyber Security)</option>
-            <option value="COMMON">COMMON / 1st Year</option>
-            <option value="OTHER">OTHER</option>
-          </select>
-        </div>
-        <div class="col-md-2">
-          <label class="form-label fw-bold small">Semester *</label>
-          <input type="number" class="form-control form-control-sm" id="importSemNum" min="1" max="8" value="1"/>
-        </div>
-        <div class="col-md-3">
-          <label class="form-label fw-bold small">Student Strength</label>
-          <input type="number" class="form-control form-control-sm" id="importStrength" min="10" max="250" value="60"/>
+        <div class="row g-2 g-md-3 align-items-end">
+          <div class="col-12 col-md-4">
+            <label class="form-label fw-bold small">Target Class / Section Name *</label>
+            <input type="text" class="form-control form-control-sm" id="importClassName" placeholder="e.g. II CSE - Section A"/>
+          </div>
+          <div class="col-12 col-sm-6 col-md-3">
+            <label class="form-label fw-bold small">Department *</label>
+            <select class="form-select form-select-sm" id="importDept">
+              <option value="CSE">CSE (Computer Science)</option>
+              <option value="IT">IT (Information Tech)</option>
+              <option value="AIDS">AI & DS (AI & Data Science)</option>
+              <option value="ECE">ECE (Electronics & Comm)</option>
+              <option value="EEE">EEE (Electrical & Electronics)</option>
+              <option value="MECH">MECH (Mechanical)</option>
+              <option value="CIVIL">CIVIL (Civil Engg)</option>
+              <option value="BME">BME (Biomedical Engg)</option>
+              <option value="CSBS">CSBS (CS & Business Systems)</option>
+              <option value="CYBER">CYBER (Cyber Security)</option>
+              <option value="COMMON">COMMON / 1st Year</option>
+              <option value="OTHER">OTHER</option>
+            </select>
+          </div>
+          <div class="col-6 col-sm-3 col-md-2">
+            <label class="form-label fw-bold small">Semester *</label>
+            <input type="number" class="form-control form-control-sm" id="importSemNum" min="1" max="8" value="1"/>
+          </div>
+          <div class="col-6 col-sm-3 col-md-3">
+            <label class="form-label fw-bold small">Student Strength</label>
+            <input type="number" class="form-control form-control-sm" id="importStrength" min="10" max="250" value="60"/>
+          </div>
         </div>
       </div>
-    </div>
 
     <!-- Live Stats Summary -->
     <div class="curriculum-metrics mb-3">
@@ -261,16 +263,16 @@
     </div>
 
     <!-- Confirmation & Import Footer -->
-    <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 pt-3 border-top gap-3">
+    <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between mt-4 pt-3 border-top gap-3">
       <div class="text-muted small">
         <i class="fas fa-shield-alt text-success me-1"></i> Subjects will be saved with dual-faculty assignments and linked to the class section.
       </div>
-      <div class="d-flex align-items-center gap-2">
+      <div class="d-flex flex-column flex-sm-row align-items-stretch align-items-sm-center gap-2 w-100 w-md-auto">
         <button type="button" class="btn btn-outline-secondary" onclick="resetFileUpload()">Cancel</button>
-        <button type="button" class="btn btn-primary px-4 fw-bold" id="btnConfirmImport" onclick="submitImport(false)">
+        <button type="button" class="btn btn-primary px-3 fw-bold" id="btnConfirmImport" onclick="submitImport(false)">
           <i class="fas fa-save me-1"></i> Save Subjects & Class
         </button>
-        <button type="button" class="btn btn-success px-4 fw-bold" id="btnImportAndGenerate" onclick="submitImport(true)">
+        <button type="button" class="btn btn-success px-3 fw-bold" id="btnImportAndGenerate" onclick="submitImport(true)">
           <i class="fas fa-calendar-check me-1"></i> Save & Generate Timetable →
         </button>
       </div>
@@ -547,6 +549,92 @@
 }
 .star-rating-select i.active {
   color: #f59e0b;
+}
+
+/* Mobile & Tablet Responsive Enhancements */
+.reg-track-scroll-wrapper {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.reg-track-scroll-wrapper::-webkit-scrollbar {
+  display: none;
+}
+
+.custom-review-table {
+  min-width: 820px;
+}
+
+@media (max-width: 768px) {
+  .setup-hero {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 1.25rem;
+    gap: 1rem;
+  }
+  .setup-hero h2 {
+    font-size: 1.35rem;
+  }
+  .setup-hero p {
+    font-size: 0.85rem;
+  }
+  .hero-actions {
+    width: 100%;
+  }
+  .hero-actions .btn {
+    width: 100%;
+  }
+  .syllabus-filter-bar {
+    padding: 12px;
+  }
+  .panel-body {
+    padding: 1rem !important;
+  }
+  .panel-head {
+    padding: 1rem !important;
+  }
+  .curriculum-metrics {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+  }
+  .metric-item {
+    padding: 0.5rem;
+  }
+  .metric-item .m-val {
+    font-size: 1.25rem;
+  }
+  #semSelectorWrap {
+    width: 100%;
+  }
+  #semSelect {
+    flex: 1;
+  }
+}
+
+@media (max-width: 576px) {
+  .reg-tab-btn {
+    padding: 6px 14px;
+    font-size: 13px;
+  }
+  .reg-segmented-track {
+    padding: 3px;
+    gap: 1px;
+  }
+  .reg-glider {
+    top: 3px;
+    height: calc(100% - 6px);
+  }
+  .mode-card {
+    padding: 1rem;
+    gap: 0.75rem;
+  }
+  .mode-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 1.1rem;
+  }
 }
 </style>
 {% endblock %}
