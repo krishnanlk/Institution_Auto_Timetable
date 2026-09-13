@@ -39,12 +39,12 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 .logout-item:hover i{color:var(--red)!important}
 
 /* ── Main ── */
-.main-content{margin-left:var(--sidebar-w);flex:1;display:flex;flex-direction:column;min-height:100vh}
-.topbar{height:var(--topbar-h);background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:14px;position:sticky;top:0;z-index:90;box-shadow:var(--sh-sm)}
+.main-content{margin-left:var(--sidebar-w);flex:1;display:flex;flex-direction:column;min-height:100vh;min-width:0}
+.topbar{height:var(--topbar-h);background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:14px;position:sticky;top:0;z-index:90;box-shadow:var(--sh-sm);min-width:0}
 .sidebar-toggle{background:none;border:none;cursor:pointer;color:var(--text2);font-size:18px;display:none}
-.topbar-title{font-family:'Syne',sans-serif;font-weight:700;font-size:17px;flex:1}
-.topbar-actions{display:flex;align-items:center;gap:8px}
-.content-area{padding:24px;flex:1}
+.topbar-title{font-family:'Syne',sans-serif;font-weight:700;font-size:17px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.content-area{padding:24px;flex:1;min-width:0}
 
 /* ── Stat Cards ── */
 .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px;margin-bottom:20px}
@@ -304,13 +304,15 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 /* ── Responsive ── */
 @media(max-width:900px){
   .sidebar{transform:translateX(-100%)}.sidebar.open{transform:translateX(0)}
-  .main-content{margin-left:0}.sidebar-toggle{display:block}
+  .main-content{margin-left:0;min-width:0;width:100%}.sidebar-toggle{display:block}
   .two-col-grid{grid-template-columns:1fr}
   .auth-left{display:none}.auth-split{min-height:auto}.auth-right{padding:32px 24px}
 }
 @media(max-width:600px){
-  .content-area{padding:14px}.stats-grid{grid-template-columns:1fr 1fr}
+  .content-area{padding:12px;min-width:0;width:100%}.stats-grid{grid-template-columns:1fr 1fr}
   .cards-grid{grid-template-columns:1fr}.formula-banner{flex-direction:column}
+  .topbar{padding:0 12px;gap:8px}
+  .topbar-title{font-size:14px}
 }
 
 /* ══════════════════════════════════════════════════════════════════════
