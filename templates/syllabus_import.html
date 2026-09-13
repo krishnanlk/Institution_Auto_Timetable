@@ -58,31 +58,31 @@
 
     <!-- Regulation Pills -->
     <div class="d-flex flex-wrap gap-2 mb-3">
-      <button class="btn btn-sm btn-dark reg-tab active" id="btnReg2021" onclick="switchRegulationTab('R2021')">
+      <button class="btn btn-sm reg-tab active" id="btnReg2021" onclick="switchRegulationTab('R2021')">
         <i class="fas fa-check me-1"></i> R2021 (CBCS Affiliated)
       </button>
-      <button class="btn btn-sm btn-outline-secondary reg-tab" id="btnReg2023" onclick="switchRegulationTab('R2023')">
+      <button class="btn btn-sm reg-tab" id="btnReg2023" onclick="switchRegulationTab('R2023')">
         R2023 (Autonomous / AICTE)
       </button>
-      <button class="btn btn-sm btn-outline-secondary reg-tab" id="btnReg2025" onclick="switchRegulationTab('R2025')">
+      <button class="btn btn-sm reg-tab" id="btnReg2025" onclick="switchRegulationTab('R2025')">
         R2025 (NextGen AI & Industry 5.0)
       </button>
     </div>
 
     <!-- Filter Bar -->
-    <div class="bg-light p-3 rounded-3 border mb-4">
+    <div class="syllabus-filter-bar p-3 rounded-3 mb-4">
       <div class="row g-3 align-items-end">
         <div class="col-md-2">
           <label class="form-label fw-bold small text-muted">Degree</label>
-          <select class="form-select form-select-sm fw-bold" id="navDegree" onchange="onNavFilterChange()">
-            <option value="B.E.">B.E.</option>
+          <select class="form-select form-select-sm syllabus-select fw-bold" id="navDegree" onchange="onNavFilterChange('degree')">
+            <option value="B.E." selected>B.E.</option>
             <option value="B.Tech.">B.Tech.</option>
           </select>
         </div>
         <div class="col-md-4">
           <label class="form-label fw-bold small text-muted">Department / Branch</label>
-          <select class="form-select form-select-sm fw-bold" id="navDept" onchange="onNavFilterChange()">
-            <option value="CSE">CSE — Computer Science & Engineering</option>
+          <select class="form-select form-select-sm syllabus-select fw-bold" id="navDept" onchange="onNavFilterChange('dept')">
+            <option value="CSE" selected>CSE — Computer Science & Engineering</option>
             <option value="IT">IT — Information Technology</option>
             <option value="AIDS">AI & DS — Artificial Intelligence & Data Science</option>
             <option value="ECE">ECE — Electronics & Communication</option>
@@ -96,10 +96,10 @@
         </div>
         <div class="col-md-3">
           <label class="form-label fw-bold small text-muted">Semester</label>
-          <select class="form-select form-select-sm fw-bold" id="navSemester">
-            <option value="Semester 1">Semester 1 (1st Year Foundation)</option>
+          <select class="form-select form-select-sm syllabus-select fw-bold" id="navSemester" onchange="onNavFilterChange('semester')">
+            <option value="Semester 1" selected>Semester 1 (1st Year Foundation)</option>
             <option value="Semester 2">Semester 2 (1st Year Core)</option>
-            <option value="Semester 3" selected>Semester 3 (2nd Year)</option>
+            <option value="Semester 3">Semester 3 (2nd Year)</option>
             <option value="Semester 4">Semester 4 (2nd Year)</option>
             <option value="Semester 5">Semester 5 (3rd Year)</option>
             <option value="Semester 6">Semester 6 (3rd Year)</option>
@@ -108,7 +108,7 @@
           </select>
         </div>
         <div class="col-md-3">
-          <button class="btn btn-primary btn-sm w-100 fw-bold" id="btnLoadCurriculum" onclick="loadCurriculumFromNav()">
+          <button class="btn btn-sm w-100 btn-load-curriculum fw-bold" id="btnLoadCurriculum" onclick="loadCurriculumFromNav()">
             <i class="fas fa-bolt me-1"></i> Load Inbuilt Curriculum
           </button>
         </div>
@@ -208,7 +208,7 @@
         </div>
         <div class="col-md-2">
           <label class="form-label fw-bold small">Semester *</label>
-          <input type="number" class="form-control form-control-sm" id="importSemNum" min="1" max="8" value="3"/>
+          <input type="number" class="form-control form-control-sm" id="importSemNum" min="1" max="8" value="1"/>
         </div>
         <div class="col-md-3">
           <label class="form-label fw-bold small">Student Strength</label>
@@ -354,12 +354,66 @@
 .reg-tab {
   font-weight: 600;
   border-radius: 20px;
-  padding: 5px 14px;
+  padding: 6px 16px;
+  font-size: 13px;
+  border: 1.5px solid #cbd5e1;
+  background: #fff;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.reg-tab:hover {
+  border-color: #6366f1;
+  color: #4f46e5;
+  background: #eef2ff;
 }
 .reg-tab.active {
-  background: #1e1b4b !important;
+  background: #4f46e5 !important;
   color: #fff !important;
-  border-color: #1e1b4b !important;
+  border-color: #4f46e5 !important;
+  box-shadow: 0 3px 12px rgba(79, 70, 229, 0.28);
+}
+
+.syllabus-filter-bar {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+}
+.syllabus-select {
+  border: 1.5px solid #cbd5e1 !important;
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  color: #0f172a !important;
+  background-color: #fff !important;
+  font-size: 13px !important;
+  padding: 6px 10px !important;
+  transition: all 0.2s ease;
+}
+.syllabus-select:focus {
+  border-color: #4f46e5 !important;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15) !important;
+  outline: none !important;
+}
+.btn-load-curriculum {
+  background: linear-gradient(135deg, #4f46e5, #6366f1) !important;
+  border: none !important;
+  color: #fff !important;
+  box-shadow: 0 3px 10px rgba(79, 70, 229, 0.25);
+  transition: all 0.2s ease;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.btn-load-curriculum:hover {
+  background: linear-gradient(135deg, #4338ca, #4f46e5) !important;
+  box-shadow: 0 5px 15px rgba(79, 70, 229, 0.35);
+  transform: translateY(-1px);
+  color: #fff !important;
 }
 
 .pdf-dropzone {
@@ -457,15 +511,29 @@ let currentSubjects = [];
 let allPresetsCache = {};
 let selectedRegTab = 'R2021';
 
-// Auto-select B.Tech for IT, AIDS, CSBS
-function onNavFilterChange() {
-  const dept = document.getElementById('navDept').value;
+let fetchAbortCtrl = null;
+
+// Reactive filter changes: Degree, Dept, or Semester
+async function onNavFilterChange(field) {
+  const deptSel = document.getElementById('navDept');
   const degSel = document.getElementById('navDegree');
-  if(['IT', 'AIDS', 'CSBS'].includes(dept)) {
-    degSel.value = 'B.Tech.';
-  } else {
-    degSel.value = 'B.E.';
+  
+  if (field === 'dept') {
+    if (['IT', 'AIDS', 'CSBS'].includes(deptSel.value)) {
+      degSel.value = 'B.Tech.';
+    } else {
+      degSel.value = 'B.E.';
+    }
+  } else if (field === 'degree') {
+    if (degSel.value === 'B.Tech.' && !['IT', 'AIDS', 'CSBS'].includes(deptSel.value)) {
+      deptSel.value = 'AIDS';
+    } else if (degSel.value === 'B.E.' && ['IT', 'AIDS', 'CSBS'].includes(deptSel.value)) {
+      deptSel.value = 'CSE';
+    }
   }
+
+  filterPresetCards();
+  await autoLoadFromNav(false);
 }
 
 function selectMode(mode) {
@@ -489,38 +557,50 @@ function selectMode(mode) {
 function switchRegulationTab(reg) {
   selectedRegTab = reg;
   document.querySelectorAll('.reg-tab').forEach(b => {
-    b.classList.remove('active', 'btn-dark');
-    b.classList.add('btn-outline-secondary');
+    b.classList.remove('active');
   });
   const activeBtn = document.getElementById(`btnReg${reg}`);
   if(activeBtn) {
-    activeBtn.classList.add('active', 'btn-dark');
-    activeBtn.classList.remove('btn-outline-secondary');
+    activeBtn.classList.add('active');
   }
   filterPresetCards();
+  autoLoadFromNav(false);
 }
 
-// Load curriculum using the interactive selector bar
-async function loadCurriculumFromNav() {
+// Auto-loads curriculum reactively and immediately renders preview
+async function autoLoadFromNav(shouldScroll = false) {
   const deg = document.getElementById('navDegree').value;
   const dept = document.getElementById('navDept').value;
   const sem = document.getElementById('navSemester').value;
+
+  if (fetchAbortCtrl) {
+    fetchAbortCtrl.abort();
+  }
+  fetchAbortCtrl = new AbortController();
+
+  try {
+    const url = `/api/curriculum/get?regulation=${encodeURIComponent(selectedRegTab)}&degree=${encodeURIComponent(deg)}&department=${encodeURIComponent(dept)}&semester=${encodeURIComponent(sem)}`;
+    const res = await fetch(url, { signal: fetchAbortCtrl.signal });
+    const data = await res.json();
+    if(data.success) {
+      applyPreset(data, shouldScroll, false);
+    }
+  } catch(e) {
+    if(e.name !== 'AbortError') {
+      console.warn("Curriculum fetch error:", e.message);
+    }
+  }
+}
+
+// Load curriculum using the interactive button (with scroll)
+async function loadCurriculumFromNav() {
   const btn = document.getElementById('btnLoadCurriculum');
   const origText = btn.innerHTML;
   btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Loading...`;
   btn.disabled = true;
 
   try {
-    const url = `/api/curriculum/get?regulation=${encodeURIComponent(selectedRegTab)}&degree=${encodeURIComponent(deg)}&department=${encodeURIComponent(dept)}&semester=${encodeURIComponent(sem)}`;
-    const res = await fetch(url);
-    const data = await res.json();
-    if(!data.success) {
-      alert(`Notice: Curriculum for ${selectedRegTab} ${dept} ${sem} not found directly. Loading closest preset.`);
-      return;
-    }
-    applyPreset(data);
-  } catch(e) {
-    alert("Error fetching curriculum: " + e.message);
+    await autoLoadFromNav(true);
   } finally {
     btn.innerHTML = origText;
     btn.disabled = false;
@@ -637,7 +717,7 @@ function renderPresetCards(presets) {
     const col = document.createElement('div');
     col.className = 'col-md-6 col-lg-4';
     col.innerHTML = `
-      <div class="preset-card" onclick='applyPreset(${JSON.stringify(p).replace(/'/g, "&apos;")})'>
+      <div class="preset-card" onclick='applyPreset(${JSON.stringify(p).replace(/'/g, "&apos;")}, true, true)'>
         <div class="d-flex justify-content-between align-items-start mb-2">
           <span class="badge bg-primary font-monospace">${p.department}</span>
           <span class="badge bg-light text-dark border">${p.semester}</span>
@@ -654,7 +734,19 @@ function renderPresetCards(presets) {
   }
 }
 
-function applyPreset(preset) {
+function applyPreset(preset, shouldScroll = false, syncControls = true) {
+  if (syncControls) {
+    if (preset.department && document.getElementById('navDept')) {
+      document.getElementById('navDept').value = preset.department;
+    }
+    if (preset.degree && document.getElementById('navDegree')) {
+      document.getElementById('navDegree').value = preset.degree;
+    }
+    if (preset.semester && document.getElementById('navSemester')) {
+      document.getElementById('navSemester').value = preset.semester;
+    }
+  }
+
   parsedData = {
     regulation: preset.regulation,
     department: preset.department,
@@ -663,7 +755,12 @@ function applyPreset(preset) {
     }
   };
   displayParsedResults(parsedData, preset.class_name);
-  window.scrollTo({ top: document.getElementById('sectionReview').offsetTop - 60, behavior: 'smooth' });
+  if (shouldScroll) {
+    const rev = document.getElementById('sectionReview');
+    if (rev) {
+      window.scrollTo({ top: rev.offsetTop - 60, behavior: 'smooth' });
+    }
+  }
 }
 
 function displayParsedResults(data, defaultClassName = null) {
@@ -715,7 +812,7 @@ function renderSemesterSubjects(semKey, defaultClassName = null) {
 
   // Extract semester number
   const numMatch = semKey.match(/\d+/);
-  const semNum = numMatch ? parseInt(numMatch[0]) : 3;
+  const semNum = numMatch ? parseInt(numMatch[0]) : 1;
   document.getElementById('importSemNum').value = semNum;
 
   const dept = document.getElementById('importDept').value;
@@ -952,7 +1049,8 @@ async function submitImport(generateImmediately = false) {
   }
 }
 
-// Initial load
+// Initial load: fetch presets and immediately render default Semester 1 curriculum
 loadPresets();
+autoLoadFromNav(false);
 </script>
 {% endblock %}

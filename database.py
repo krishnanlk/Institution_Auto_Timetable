@@ -382,6 +382,26 @@ CREATE TABLE IF NOT EXISTS allocation_history (
     periods_count   INTEGER DEFAULT 0,
     allocation_date TEXT DEFAULT (datetime('now'))
 );
+
+-- ── Inbuilt Anna University Curricula Repository ──────────────
+CREATE TABLE IF NOT EXISTS inbuilt_curriculum (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    regulation       TEXT NOT NULL,
+    degree           TEXT NOT NULL,
+    department       TEXT NOT NULL,
+    semester         TEXT NOT NULL,
+    semester_num     INTEGER NOT NULL,
+    subject_code     TEXT NOT NULL,
+    subject_name     TEXT NOT NULL,
+    abbreviation     TEXT,
+    periods_per_week INTEGER DEFAULT 3,
+    difficulty_level INTEGER DEFAULT 3,
+    is_lab           INTEGER DEFAULT 0,
+    lab_duration     INTEGER DEFAULT 0,
+    credits          REAL DEFAULT 3.0,
+    created_at       TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_curr_lookup ON inbuilt_curriculum(regulation, department, semester);
 """
 
 def generate_abbreviation(name: str, is_lab: bool = False) -> str:
@@ -509,7 +529,59 @@ def init_db():
         except Exception:
             pass
 
+        # Seed inbuilt Anna University curricula (R2021, R2023, R2025 across all 10 departments)
+        seed_inbuilt_curricula_if_empty(conn)
+
     print(f"[OK] Database schema ready ({DB_BACKEND}).")
+
+
+def seed_inbuilt_curricula_if_empty(conn):
+    """Seed official Anna University curricula across all 10 departments and 8 semesters into the database if not present."""
+    try:
+        # Check if table already populated
+        row = conn.execute("SELECT COUNT(*) as c FROM inbuilt_curriculum").fetchone()
+        count = row["c"] if row else 0
+        if count >= 200:
+            return  # Already populated
+
+        import curriculum_data
+        reg_map = [
+            ("R2021", curriculum_data.R2021_DATA),
+            ("R2023", curriculum_data.R2023_DATA),
+            ("R2025", curriculum_data.R2025_DATA)
+        ]
+
+        inserted = 0
+        for reg_name, data_source in reg_map:
+            for (deg, dept, sem), subs in data_source.items():
+                m = re.search(r'\d+', sem)
+                sem_num = int(m.group(0)) if m else 1
+                for s in subs:
+                    conn.execute("""
+                        INSERT INTO inbuilt_curriculum 
+                        (regulation, degree, department, semester, semester_num, subject_code, subject_name, abbreviation, periods_per_week, difficulty_level, is_lab, lab_duration, credits)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        reg_name,
+                        deg,
+                        dept,
+                        sem,
+                        sem_num,
+                        s.get("subject_code", ""),
+                        s.get("subject_name", ""),
+                        s.get("abbreviation", ""),
+                        int(s.get("periods_per_week", 3)),
+                        int(s.get("difficulty_level", 3)),
+                        1 if s.get("is_lab") else 0,
+                        int(s.get("lab_duration", 0)),
+                        float(s.get("credits", 3.0))
+                    ))
+                    inserted += 1
+        if inserted > 0:
+            conn.commit()
+            print(f"[OK] Seeded {inserted} official inbuilt curriculum records into database.")
+    except Exception as e:
+        print(f"[WARN] Inbuilt curriculum seeding skipped: {e}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════

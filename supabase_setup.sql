@@ -175,6 +175,27 @@ CREATE TABLE IF NOT EXISTS allocation_history (
     allocation_date TEXT DEFAULT (NOW()::TEXT)
 );
 
+-- ── Inbuilt Regulation Curricula Repository ─────────────────────────
+CREATE TABLE IF NOT EXISTS inbuilt_curriculum (
+    id               SERIAL PRIMARY KEY,
+    regulation       TEXT NOT NULL,
+    degree           TEXT NOT NULL,
+    department       TEXT NOT NULL,
+    semester         TEXT NOT NULL,
+    semester_num     INTEGER NOT NULL,
+    subject_code     TEXT NOT NULL,
+    subject_name     TEXT NOT NULL,
+    abbreviation     TEXT,
+    periods_per_week INTEGER DEFAULT 3,
+    difficulty_level INTEGER DEFAULT 3,
+    is_lab           INTEGER DEFAULT 0,
+    lab_duration     INTEGER DEFAULT 0,
+    credits          NUMERIC DEFAULT 3.0,
+    created_at       TEXT DEFAULT (NOW()::TEXT)
+);
+CREATE INDEX IF NOT EXISTS idx_curr_lookup ON inbuilt_curriculum(regulation, department, semester);
+
+
 -- ════════════════════════════════════════════════════════════════════
 -- Optional: Row Level Security (RLS) for production multi-tenancy
 -- Uncomment the blocks below to enable RLS.

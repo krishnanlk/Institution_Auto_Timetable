@@ -907,10 +907,35 @@ def api_curriculum_get():
     reg = request.args.get("regulation", "R2021")
     deg = request.args.get("degree", "B.E.")
     dept = request.args.get("department", "CSE")
-    sem = request.args.get("semester", "Semester 3")
+    sem = request.args.get("semester", "Semester 1")
     res = curriculum_data.get_curriculum(reg, deg, dept, sem)
     if res:
         return jsonify(res)
+
+    # Database query fallback
+    try:
+        with get_db() as conn:
+            rows = conn.execute("""
+                SELECT subject_code, subject_name, abbreviation, periods_per_week, difficulty_level, is_lab, lab_duration, credits
+                FROM inbuilt_curriculum
+                WHERE (regulation=? OR regulation LIKE ?) AND (department=? OR department LIKE ?) AND (semester=? OR semester LIKE ?)
+                ORDER BY id
+            """, (reg, f"%{reg}%", dept, f"%{dept}%", sem, f"%{sem}%")).fetchall()
+            if rows:
+                subjects = [dict(r) for r in rows]
+                sem_num = sem.split()[-1] if " " in sem else sem
+                return jsonify({
+                    "success": True,
+                    "regulation": f"Anna University {reg}",
+                    "degree": deg,
+                    "department": dept,
+                    "semester": sem,
+                    "class_name": f"{deg} {dept} - Sem {sem_num} (Sec A)",
+                    "subjects": subjects
+                })
+    except Exception:
+        pass
+
     return jsonify({"success": False, "error": "Curriculum not found"}), 404
 
 

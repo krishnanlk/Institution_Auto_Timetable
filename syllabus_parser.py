@@ -466,13 +466,27 @@ def get_regulation_presets() -> Dict[str, Any]:
     try:
         import curriculum_data
         presets = {}
-        # Populate key highlighted presets from R2021, R2023, and R2025
-        # R2021
-        for key in [
+        # Sem 1 presets for ALL 10 departments (R2021 foundation)
+        depts_sem1 = [
             ("B.E.", "CSE", "Semester 1"),
+            ("B.Tech.", "IT", "Semester 1"),
+            ("B.Tech.", "AIDS", "Semester 1"),
+            ("B.E.", "ECE", "Semester 1"),
+            ("B.E.", "EEE", "Semester 1"),
+            ("B.E.", "MECH", "Semester 1"),
+            ("B.E.", "CIVIL", "Semester 1"),
+            ("B.Tech.", "CSBS", "Semester 1"),
+            ("B.E.", "CYBER", "Semester 1"),
+            ("B.E.", "BME", "Semester 1"),
+        ]
+        for deg, dept, sem in depts_sem1:
+            c = curriculum_data.get_curriculum("R2021", deg, dept, sem)
+            if c:
+                presets[f"AU R2021 – {dept} ({sem})"] = c
+
+        # Sem 3 & 4 core presets
+        for key in [
             ("B.E.", "CSE", "Semester 3"),
-            ("B.E.", "CSE", "Semester 4"),
-            ("B.E.", "CSE", "Semester 5"),
             ("B.Tech.", "IT", "Semester 3"),
             ("B.Tech.", "AIDS", "Semester 3"),
             ("B.E.", "ECE", "Semester 3"),
@@ -485,32 +499,14 @@ def get_regulation_presets() -> Dict[str, Any]:
         ]:
             c = curriculum_data.get_curriculum("R2021", key[0], key[1], key[2])
             if c:
-                presets[f"AU R2021 - {key[1]} ({key[2]})"] = c
+                presets[f"AU R2021 – {key[1]} ({key[2]})"] = c
 
-        # R2023
-        for key in [
-            ("B.E.", "CSE", "Semester 3"),
-            ("B.E.", "CSE", "Semester 4"),
-            ("B.Tech.", "IT", "Semester 3"),
-            ("B.Tech.", "AIDS", "Semester 3"),
-            ("B.E.", "ECE", "Semester 3"),
-            ("B.E.", "MECH", "Semester 3"),
-        ]:
-            c = curriculum_data.get_curriculum("R2023", key[0], key[1], key[2])
-            if c:
-                presets[f"AU R2023 (Autonomous) - {key[1]} ({key[2]})"] = c
-
-        # R2025
-        for key in [
-            ("B.E.", "CSE", "Semester 3"),
-            ("B.E.", "CSE", "Semester 4"),
-            ("B.Tech.", "AIDS", "Semester 3"),
-            ("B.E.", "ECE", "Semester 3"),
-            ("B.E.", "MECH", "Semester 3"),
-        ]:
-            c = curriculum_data.get_curriculum("R2025", key[0], key[1], key[2])
-            if c:
-                presets[f"AU R2025 (AI & Industry 5.0) - {key[1]} ({key[2]})"] = c
+        # R2023 & R2025 Presets
+        for reg in ["R2023", "R2025"]:
+            for deg, dept, sem in [("B.E.", "CSE", "Semester 1"), ("B.Tech.", "AIDS", "Semester 1"), ("B.E.", "ECE", "Semester 1")]:
+                c = curriculum_data.get_curriculum(reg, deg, dept, sem)
+                if c:
+                    presets[f"AU {reg} – {dept} ({sem})"] = c
 
         return presets
     except Exception as e:
