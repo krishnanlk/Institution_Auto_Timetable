@@ -11,9 +11,9 @@
   <!-- Mode Selection Hero -->
   <div class="card-panel setup-hero mb-4">
     <div class="hero-text">
-      <div class="hero-badge"><i class="fas fa-graduation-cap me-1"></i> Curriculum & Regulation Engine</div>
+      <div class="hero-badge"><i class="fas fa-graduation-cap me-1"></i> Official Anna University Regulation Engine</div>
       <h2>Setup Timetable from Curriculum Syllabus</h2>
-      <p>Import official Anna University (R2017 / R2021 / R2025) or Autonomous College Regulation books. The AI parser extracts subject codes, L-T-P-C structures, lab durations, and difficulty levels automatically.</p>
+      <p>Choose from official <strong>inbuilt Anna University Curricula (R2021, R2023, R2025)</strong> across all departments & semesters, or drop your college's custom syllabus PDF. L-T-P-C structures, lab durations, dual-faculty allocations, and difficulty levels are configured automatically.</p>
     </div>
     <div class="hero-actions">
       <button class="btn btn-outline-light btn-sm" onclick="document.getElementById('manualChoiceModal') && new bootstrap.Modal(document.getElementById('manualChoiceModal')).show()">
@@ -25,34 +25,112 @@
   <!-- Dual Mode Selection Cards -->
   <div class="row g-3 mb-4">
     <div class="col-md-6">
-      <div class="mode-card active-mode" id="cardPdfMode" onclick="selectMode('pdf')">
-        <div class="mode-icon blue"><i class="fas fa-file-pdf"></i></div>
+      <div class="mode-card active-mode" id="cardPresetMode" onclick="selectMode('preset')">
+        <div class="mode-icon purple"><i class="fas fa-book-bookmark"></i></div>
         <div class="mode-body">
-          <div class="mode-title">Upload Syllabus PDF <span class="badge bg-primary ms-1">Recommended</span></div>
-          <p class="mode-desc">Drop Anna University regulation booklet or semester syllabus PDF. We automatically extract and compute all parameters.</p>
+          <div class="mode-title">Inbuilt AU Regulations (R2021, R2023, R2025) <span class="badge bg-success ms-1">All Depts</span></div>
+          <p class="mode-desc">Instant official curricula for B.E. & B.Tech across CSE, IT, AI&DS, ECE, EEE, MECH, CIVIL, CSBS, CYBER, BME (Semesters 1 to 8).</p>
         </div>
         <div class="mode-radio"><i class="fas fa-check-circle text-primary"></i></div>
       </div>
     </div>
 
     <div class="col-md-6">
-      <div class="mode-card" id="cardPresetMode" onclick="selectMode('preset')">
-        <div class="mode-icon purple"><i class="fas fa-bolt"></i></div>
+      <div class="mode-card" id="cardPdfMode" onclick="selectMode('pdf')">
+        <div class="mode-icon blue"><i class="fas fa-file-pdf"></i></div>
         <div class="mode-body">
-          <div class="mode-title">Load Regulation Presets (1-Click)</div>
-          <p class="mode-desc">Instant templates for Anna University R2021 (CSE, ECE, MECH) Semesters 3 to 6 with pre-configured credits and lab hours.</p>
+          <div class="mode-title">Upload Custom Syllabus PDF</div>
+          <p class="mode-desc">Drop your own autonomous college syllabus book or regulation booklet. The AI parser extracts subjects, L-T-P-C, and lab hours.</p>
         </div>
         <div class="mode-radio"><i class="far fa-circle text-muted"></i></div>
       </div>
     </div>
   </div>
 
-  <!-- SECTION 1: PDF UPLOAD DROPZONE -->
-  <div id="sectionPdfUpload" class="card-panel mb-4">
+  <!-- SECTION 1: INBUILT REGULATION NAVIGATOR (R2021, R2023, R2025) -->
+  <div id="sectionPresetPicker" class="card-panel mb-4">
+    <div class="panel-head border-bottom pb-3 mb-3">
+      <div>
+        <h3><i class="fas fa-graduation-cap text-warning me-2"></i>Inbuilt Anna University Regulation Browser</h3>
+        <span class="panel-sub">Select regulation, degree, department, and semester to instantly load official courses</span>
+      </div>
+    </div>
+
+    <!-- Regulation Pills -->
+    <div class="d-flex flex-wrap gap-2 mb-3">
+      <button class="btn btn-sm btn-dark reg-tab active" id="btnReg2021" onclick="switchRegulationTab('R2021')">
+        <i class="fas fa-check me-1"></i> R2021 (CBCS Affiliated)
+      </button>
+      <button class="btn btn-sm btn-outline-secondary reg-tab" id="btnReg2023" onclick="switchRegulationTab('R2023')">
+        R2023 (Autonomous / AICTE)
+      </button>
+      <button class="btn btn-sm btn-outline-secondary reg-tab" id="btnReg2025" onclick="switchRegulationTab('R2025')">
+        R2025 (NextGen AI & Industry 5.0)
+      </button>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="bg-light p-3 rounded-3 border mb-4">
+      <div class="row g-3 align-items-end">
+        <div class="col-md-2">
+          <label class="form-label fw-bold small text-muted">Degree</label>
+          <select class="form-select form-select-sm fw-bold" id="navDegree" onchange="onNavFilterChange()">
+            <option value="B.E.">B.E.</option>
+            <option value="B.Tech.">B.Tech.</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-bold small text-muted">Department / Branch</label>
+          <select class="form-select form-select-sm fw-bold" id="navDept" onchange="onNavFilterChange()">
+            <option value="CSE">CSE — Computer Science & Engineering</option>
+            <option value="IT">IT — Information Technology</option>
+            <option value="AIDS">AI & DS — Artificial Intelligence & Data Science</option>
+            <option value="ECE">ECE — Electronics & Communication</option>
+            <option value="EEE">EEE — Electrical & Electronics</option>
+            <option value="MECH">MECH — Mechanical Engineering</option>
+            <option value="CIVIL">CIVIL — Civil Engineering</option>
+            <option value="BME">BME — Biomedical Engineering</option>
+            <option value="CSBS">CSBS — Computer Science & Business Systems</option>
+            <option value="CYBER">CYBER — Cyber Security</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label fw-bold small text-muted">Semester</label>
+          <select class="form-select form-select-sm fw-bold" id="navSemester">
+            <option value="Semester 1">Semester 1 (1st Year Foundation)</option>
+            <option value="Semester 2">Semester 2 (1st Year Core)</option>
+            <option value="Semester 3" selected>Semester 3 (2nd Year)</option>
+            <option value="Semester 4">Semester 4 (2nd Year)</option>
+            <option value="Semester 5">Semester 5 (3rd Year)</option>
+            <option value="Semester 6">Semester 6 (3rd Year)</option>
+            <option value="Semester 7">Semester 7 (Final Year)</option>
+            <option value="Semester 8">Semester 8 (Project / Internship)</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <button class="btn btn-primary btn-sm w-100 fw-bold" id="btnLoadCurriculum" onclick="loadCurriculumFromNav()">
+            <i class="fas fa-bolt me-1"></i> Load Inbuilt Curriculum
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Presets Cards Grid -->
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <h5 class="fw-bold mb-0 text-muted small text-uppercase">Popular Regulation Presets</h5>
+      <input type="text" class="form-control form-control-sm" id="presetSearch" placeholder="Search branch / semester..." style="max-width:240px;" oninput="filterPresetCards(this.value)"/>
+    </div>
+    <div class="row g-3" id="presetsListRow">
+      <div class="col-12 text-center py-4 text-muted"><div class="spinner-border spinner-border-sm text-primary me-2"></div>Loading AU presets...</div>
+    </div>
+  </div>
+
+  <!-- SECTION 2: CUSTOM PDF UPLOAD DROPZONE -->
+  <div id="sectionPdfUpload" class="card-panel mb-4 d-none">
     <div class="panel-head">
       <div>
         <h3><i class="fas fa-cloud-arrow-up text-primary me-2"></i>Drop Syllabus or Regulation Document</h3>
-        <span class="panel-sub">Supports Anna University Curriculum PDFs, Autonomous syllabus books, or scanned course schedules (.pdf)</span>
+        <span class="panel-sub">Supports custom college PDF books, scanned syllabuses, or Anna University regulation documents (.pdf)</span>
       </div>
     </div>
 
@@ -61,7 +139,7 @@
       <div class="dz-content">
         <div class="dz-icon"><i class="fas fa-file-invoice fa-3x text-primary mb-3"></i></div>
         <h5 class="fw-bold mb-1">Click to Browse or Drag & Drop Syllabus PDF</h5>
-        <p class="text-muted small mb-3">Anna University Regulation PDF, Autonomous College Curriculum Book, or Semester Syllabus</p>
+        <p class="text-muted small mb-3">Upload your regulation booklet or semester curriculum PDF</p>
         <button type="button" class="btn btn-primary btn-sm px-4"><i class="fas fa-folder-open me-2"></i>Choose PDF File</button>
       </div>
       <div class="dz-loading d-none" id="dzLoading">
@@ -81,20 +159,7 @@
     </div>
   </div>
 
-  <!-- SECTION 2: REGULATION PRESET PICKER -->
-  <div id="sectionPresetPicker" class="card-panel mb-4 d-none">
-    <div class="panel-head">
-      <div>
-        <h3><i class="fas fa-bookmark text-warning me-2"></i>Choose Pre-Configured Regulation Template</h3>
-        <span class="panel-sub">Official Anna University Regulation 2021 curriculum structures ready to import</span>
-      </div>
-    </div>
-    <div class="row g-3" id="presetsListRow">
-      <div class="col-12 text-center py-4 text-muted"><div class="spinner-border spinner-border-sm text-primary me-2"></div>Loading presets...</div>
-    </div>
-  </div>
-
-  <!-- SECTION 3: EXTRACTED CURRICULUM REVIEW & MAPPING WORKSPACE -->
+  <!-- SECTION 3: EXTRACTED CURRICULUM REVIEW & FACULTY MAPPING (WITH SECONDARY STAFF FOR LABS) -->
   <div id="sectionReview" class="card-panel mb-4 d-none">
     <div class="panel-head border-bottom pb-3 mb-3">
       <div class="d-flex flex-wrap align-items-center justify-content-between w-100 gap-2">
@@ -105,7 +170,7 @@
             <span class="badge bg-secondary" id="badgeTotalFound">8 Subjects Extracted</span>
           </div>
           <h3 class="mb-0">Curriculum Review & Faculty Assignment</h3>
-          <span class="panel-sub">Verify extracted parameters, adjust difficulty/periods, and map faculty before creating class.</span>
+          <span class="panel-sub">Verify extracted parameters, adjust difficulty, and assign primary faculty and lab secondary staff before generating.</span>
         </div>
         <div class="d-flex align-items-center gap-2">
           <div id="semSelectorWrap" class="d-flex align-items-center gap-2">
@@ -128,12 +193,15 @@
           <label class="form-label fw-bold small">Department *</label>
           <select class="form-select form-select-sm" id="importDept">
             <option value="CSE">CSE (Computer Science)</option>
+            <option value="IT">IT (Information Tech)</option>
+            <option value="AIDS">AI & DS (AI & Data Science)</option>
             <option value="ECE">ECE (Electronics & Comm)</option>
             <option value="EEE">EEE (Electrical & Electronics)</option>
             <option value="MECH">MECH (Mechanical)</option>
             <option value="CIVIL">CIVIL (Civil Engg)</option>
-            <option value="IT">IT (Information Tech)</option>
-            <option value="AIDS">AI & Data Science</option>
+            <option value="BME">BME (Biomedical Engg)</option>
+            <option value="CSBS">CSBS (CS & Business Systems)</option>
+            <option value="CYBER">CYBER (Cyber Security)</option>
             <option value="COMMON">COMMON / 1st Year</option>
             <option value="OTHER">OTHER</option>
           </select>
@@ -174,15 +242,16 @@
       <table class="table table-hover align-middle custom-review-table" id="reviewTable">
         <thead class="table-dark">
           <tr>
-            <th width="40"><input type="checkbox" id="checkAllSubs" checked onchange="toggleSelectAll(this)"/></th>
-            <th width="110">Code</th>
+            <th width="35"><input type="checkbox" id="checkAllSubs" checked onchange="toggleSelectAll(this)"/></th>
+            <th width="105">Code</th>
             <th>Subject Name</th>
-            <th width="90">Abbr</th>
-            <th width="110">Periods/Wk</th>
+            <th width="85">Abbr</th>
+            <th width="105">Periods/Wk</th>
             <th width="140">Type & Lab Dur</th>
-            <th width="140">Difficulty (1-5)</th>
-            <th width="200">Primary Faculty</th>
-            <th width="50"></th>
+            <th width="130">Difficulty (1-5)</th>
+            <th width="175">Primary Faculty</th>
+            <th width="185">Secondary Staff (Lab) <span class="badge bg-warning text-dark ms-1" style="font-size:10px;">Lab</span></th>
+            <th width="40"></th>
           </tr>
         </thead>
         <tbody id="reviewTableBody">
@@ -194,7 +263,7 @@
     <!-- Confirmation & Import Footer -->
     <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 pt-3 border-top gap-3">
       <div class="text-muted small">
-        <i class="fas fa-shield-alt text-success me-1"></i> Subjects will be saved to your institution workspace and linked to the class.
+        <i class="fas fa-shield-alt text-success me-1"></i> Subjects will be saved with dual-faculty assignments and linked to the class section.
       </div>
       <div class="d-flex align-items-center gap-2">
         <button type="button" class="btn btn-outline-secondary" onclick="resetFileUpload()">Cancel</button>
@@ -211,7 +280,7 @@
 
 <style>
 .syllabus-container {
-  max-width: 1200px;
+  max-width: 1250px;
   margin: 0 auto;
 }
 .setup-hero {
@@ -243,7 +312,7 @@
 .setup-hero p {
   color: rgba(255,255,255,0.85);
   font-size: 0.95rem;
-  max-width: 750px;
+  max-width: 780px;
   margin-bottom: 0;
 }
 .mode-card {
@@ -281,6 +350,17 @@
 .mode-icon.purple { background: #f3e8ff; color: #7e22ce; }
 .mode-title { font-weight: 700; color: #1e293b; margin-bottom: 2px; }
 .mode-desc { font-size: 0.82rem; color: #64748b; margin-bottom: 0; line-height: 1.3; }
+
+.reg-tab {
+  font-weight: 600;
+  border-radius: 20px;
+  padding: 5px 14px;
+}
+.reg-tab.active {
+  background: #1e1b4b !important;
+  color: #fff !important;
+  border-color: #1e1b4b !important;
+}
 
 .pdf-dropzone {
   border: 2px dashed #cbd5e1;
@@ -330,14 +410,14 @@
   letter-spacing: 0.5px;
 }
 .custom-review-table th {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  padding: 0.6rem 0.75rem;
+  padding: 0.6rem 0.6rem;
 }
 .custom-review-table td {
-  padding: 0.5rem 0.75rem;
-  font-size: 0.88rem;
+  padding: 0.45rem 0.5rem;
+  font-size: 0.86rem;
 }
 .star-rating-select {
   display: flex;
@@ -374,6 +454,19 @@ const STAFF_LIST = {{ staff_list | tojson }};
 let parsedData = null;
 let currentSemKey = "";
 let currentSubjects = [];
+let allPresetsCache = {};
+let selectedRegTab = 'R2021';
+
+// Auto-select B.Tech for IT, AIDS, CSBS
+function onNavFilterChange() {
+  const dept = document.getElementById('navDept').value;
+  const degSel = document.getElementById('navDegree');
+  if(['IT', 'AIDS', 'CSBS'].includes(dept)) {
+    degSel.value = 'B.Tech.';
+  } else {
+    degSel.value = 'B.E.';
+  }
+}
 
 function selectMode(mode) {
   if(mode === 'pdf') {
@@ -390,11 +483,51 @@ function selectMode(mode) {
     document.getElementById('cardPdfMode').querySelector('.mode-radio').innerHTML = '<i class="far fa-circle text-muted"></i>';
     document.getElementById('sectionPresetPicker').classList.remove('d-none');
     document.getElementById('sectionPdfUpload').classList.add('d-none');
-    loadPresets();
   }
 }
 
-// Drag & Drop Setup
+function switchRegulationTab(reg) {
+  selectedRegTab = reg;
+  document.querySelectorAll('.reg-tab').forEach(b => {
+    b.classList.remove('active', 'btn-dark');
+    b.classList.add('btn-outline-secondary');
+  });
+  const activeBtn = document.getElementById(`btnReg${reg}`);
+  if(activeBtn) {
+    activeBtn.classList.add('active', 'btn-dark');
+    activeBtn.classList.remove('btn-outline-secondary');
+  }
+  filterPresetCards();
+}
+
+// Load curriculum using the interactive selector bar
+async function loadCurriculumFromNav() {
+  const deg = document.getElementById('navDegree').value;
+  const dept = document.getElementById('navDept').value;
+  const sem = document.getElementById('navSemester').value;
+  const btn = document.getElementById('btnLoadCurriculum');
+  const origText = btn.innerHTML;
+  btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Loading...`;
+  btn.disabled = true;
+
+  try {
+    const url = `/api/curriculum/get?regulation=${encodeURIComponent(selectedRegTab)}&degree=${encodeURIComponent(deg)}&department=${encodeURIComponent(dept)}&semester=${encodeURIComponent(sem)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if(!data.success) {
+      alert(`Notice: Curriculum for ${selectedRegTab} ${dept} ${sem} not found directly. Loading closest preset.`);
+      return;
+    }
+    applyPreset(data);
+  } catch(e) {
+    alert("Error fetching curriculum: " + e.message);
+  } finally {
+    btn.innerHTML = origText;
+    btn.disabled = false;
+  }
+}
+
+// Drag & Drop Setup for Custom PDF
 const dropzone = document.getElementById('pdfDropzone');
 if(dropzone) {
   ['dragenter', 'dragover'].forEach(name => {
@@ -466,32 +599,58 @@ function resetFileUpload() {
 
 async function loadPresets() {
   const row = document.getElementById('presetsListRow');
-  row.innerHTML = `<div class="col-12 text-center py-4 text-muted"><div class="spinner-border spinner-border-sm text-primary me-2"></div>Loading presets...</div>`;
+  row.innerHTML = `<div class="col-12 text-center py-4 text-muted"><div class="spinner-border spinner-border-sm text-primary me-2"></div>Loading AU presets...</div>`;
   try {
     const res = await fetch('/api/syllabus/presets');
-    const presets = await res.json();
-    row.innerHTML = '';
-    for(const [title, p] of Object.entries(presets)) {
-      const col = document.createElement('div');
-      col.className = 'col-md-6';
-      col.innerHTML = `
-        <div class="preset-card" onclick='applyPreset(${JSON.stringify(p).replace(/'/g, "&apos;")})'>
-          <div class="d-flex justify-content-between align-items-start mb-2">
-            <span class="badge bg-primary font-monospace">${p.department}</span>
-            <span class="badge bg-light text-dark border">${p.semester}</span>
-          </div>
-          <h5 class="fw-bold mb-1">${title}</h5>
-          <p class="text-muted small mb-2">${p.subjects.length} Subjects (Theory + Lab) • ${p.regulation}</p>
-          <div class="d-flex flex-wrap gap-1">
-            ${p.subjects.slice(0, 4).map(s => `<span class="badge bg-secondary-subtle text-secondary" style="font-size:10px;">${s.subject_code}</span>`).join('')}
-            ${p.subjects.length > 4 ? `<span class="badge bg-secondary-subtle text-secondary" style="font-size:10px;">+${p.subjects.length - 4} more</span>` : ''}
-          </div>
-        </div>
-      `;
-      row.appendChild(col);
-    }
+    allPresetsCache = await res.json();
+    renderPresetCards(allPresetsCache);
   } catch(e) {
     row.innerHTML = `<div class="col-12 text-danger text-center">Failed to load presets: ${e.message}</div>`;
+  }
+}
+
+function filterPresetCards(query = null) {
+  const searchVal = (query !== null ? query : document.getElementById('presetSearch').value).toLowerCase().trim();
+  const filtered = {};
+
+  for(const [title, p] of Object.entries(allPresetsCache)) {
+    const titleLower = title.toLowerCase();
+    const regMatch = title.includes(selectedRegTab) || !selectedRegTab;
+    const searchMatch = !searchVal || titleLower.includes(searchVal) || p.department.toLowerCase().includes(searchVal);
+    if(regMatch && searchMatch) {
+      filtered[title] = p;
+    }
+  }
+  renderPresetCards(filtered);
+}
+
+function renderPresetCards(presets) {
+  const row = document.getElementById('presetsListRow');
+  row.innerHTML = '';
+  const entries = Object.entries(presets);
+  if(entries.length === 0) {
+    row.innerHTML = `<div class="col-12 text-center py-4 text-muted">No presets match current filter. Use the selector above to load any specific semester.</div>`;
+    return;
+  }
+
+  for(const [title, p] of entries) {
+    const col = document.createElement('div');
+    col.className = 'col-md-6 col-lg-4';
+    col.innerHTML = `
+      <div class="preset-card" onclick='applyPreset(${JSON.stringify(p).replace(/'/g, "&apos;")})'>
+        <div class="d-flex justify-content-between align-items-start mb-2">
+          <span class="badge bg-primary font-monospace">${p.department}</span>
+          <span class="badge bg-light text-dark border">${p.semester}</span>
+        </div>
+        <h6 class="fw-bold mb-1">${title}</h6>
+        <p class="text-muted small mb-2">${p.subjects.length} Subjects (Theory + Lab) • ${p.regulation}</p>
+        <div class="d-flex flex-wrap gap-1">
+          ${p.subjects.slice(0, 3).map(s => `<span class="badge bg-secondary-subtle text-secondary" style="font-size:10px;">${s.subject_code}</span>`).join('')}
+          ${p.subjects.length > 3 ? `<span class="badge bg-secondary-subtle text-secondary" style="font-size:10px;">+${p.subjects.length - 3} more</span>` : ''}
+        </div>
+      </div>
+    `;
+    row.appendChild(col);
   }
 }
 
@@ -554,7 +713,7 @@ function renderSemesterSubjects(semKey, defaultClassName = null) {
     lab_staff2_id: null
   }));
 
-  // Extract semester number (e.g. "Semester 3" -> 3)
+  // Extract semester number
   const numMatch = semKey.match(/\d+/);
   const semNum = numMatch ? parseInt(numMatch[0]) : 3;
   document.getElementById('importSemNum').value = semNum;
@@ -574,11 +733,18 @@ function renderTableRows() {
     tr.id = `subRow_${idx}`;
     if(!sub.selected) tr.classList.add('opacity-50', 'bg-light');
 
-    // Faculty select options
-    let staffOptions = `<option value="">-- Assign Faculty --</option>`;
+    // Primary Faculty select options
+    let staff1Options = `<option value="">-- Assign Primary Staff --</option>`;
     STAFF_LIST.forEach(st => {
       const isSelected = sub.assigned_staff_id == st.id ? 'selected' : '';
-      staffOptions += `<option value="${st.id}" ${isSelected}>${st.name} (${st.department})</option>`;
+      staff1Options += `<option value="${st.id}" ${isSelected}>${st.name} (${st.department})</option>`;
+    });
+
+    // Secondary Staff (Lab Co-Faculty) options
+    let staff2Options = `<option value="">-- Assign 2nd Co-Staff --</option>`;
+    STAFF_LIST.forEach(st => {
+      const isSelected = sub.lab_staff2_id == st.id ? 'selected' : '';
+      staff2Options += `<option value="${st.id}" ${isSelected}>${st.name} (${st.department})</option>`;
     });
 
     tr.innerHTML = `
@@ -602,7 +768,7 @@ function renderTableRows() {
       </td>
       <td>
         <div class="d-flex flex-column gap-1">
-          <select class="form-select form-select-sm" onchange="updateSubType(${idx}, this.value)">
+          <select class="form-select form-select-sm fw-semibold" onchange="updateSubType(${idx}, this.value)">
             <option value="0" ${!sub.is_lab ? 'selected' : ''}>📖 Lecture</option>
             <option value="1" ${sub.is_lab ? 'selected' : ''}>🧪 Lab / Practical</option>
           </select>
@@ -623,8 +789,20 @@ function renderTableRows() {
       </td>
       <td>
         <select class="form-select form-select-sm" onchange="updateSubProp(${idx}, 'assigned_staff_id', this.value ? parseInt(this.value) : null)">
-          ${staffOptions}
+          ${staff1Options}
         </select>
+      </td>
+      <td>
+        ${sub.is_lab ? `
+          <div class="input-group input-group-sm">
+            <span class="input-group-text bg-warning-subtle text-warning-emphasis"><i class="fas fa-flask"></i></span>
+            <select class="form-select form-select-sm border-warning" style="background-color:#fffdf5;" onchange="updateSubProp(${idx}, 'lab_staff2_id', this.value ? parseInt(this.value) : null)">
+              ${staff2Options}
+            </select>
+          </div>
+        ` : `
+          <span class="badge bg-light text-muted border px-2 py-1"><i class="fas fa-minus me-1"></i>Theory (N/A)</span>
+        `}
       </td>
       <td>
         <button class="btn btn-sm btn-link text-danger p-0" onclick="removeSubjectRow(${idx})" title="Remove Subject"><i class="fas fa-trash"></i></button>
@@ -646,8 +824,10 @@ function updateSubProp(idx, prop, val) {
 function updateSubType(idx, val) {
   const isLab = val === "1";
   currentSubjects[idx].is_lab = isLab;
-  if(isLab && !currentSubjects[idx].lab_duration) {
-    currentSubjects[idx].lab_duration = 2;
+  if(isLab) {
+    if(!currentSubjects[idx].lab_duration) currentSubjects[idx].lab_duration = 2;
+  } else {
+    currentSubjects[idx].lab_staff2_id = null;
   }
   renderTableRows();
 }
@@ -757,7 +937,7 @@ async function submitImport(generateImmediately = false) {
       if(generateImmediately) {
         window.location.href = `/timetable?class_id=${data.class_id}&auto_gen=1`;
       } else {
-        alert(`Successfully imported ${data.created_subjects_count} subjects and created class '${className}'!`);
+        alert(`Successfully imported ${data.created_subjects_count} subjects with dual-faculty mappings for class '${className}'!`);
         window.location.href = '/classes';
       }
     } else {
@@ -771,5 +951,8 @@ async function submitImport(generateImmediately = false) {
     btn.disabled = false;
   }
 }
+
+// Initial load
+loadPresets();
 </script>
 {% endblock %}

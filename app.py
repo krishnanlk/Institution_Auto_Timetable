@@ -893,6 +893,27 @@ def api_syllabus_presets():
     return jsonify(syllabus_parser.get_regulation_presets())
 
 
+@app.route("/api/curriculum/index", methods=["GET"])
+@login_required
+def api_curriculum_index():
+    import curriculum_data
+    return jsonify(curriculum_data.get_all_curricula_index())
+
+
+@app.route("/api/curriculum/get", methods=["GET"])
+@login_required
+def api_curriculum_get():
+    import curriculum_data
+    reg = request.args.get("regulation", "R2021")
+    deg = request.args.get("degree", "B.E.")
+    dept = request.args.get("department", "CSE")
+    sem = request.args.get("semester", "Semester 3")
+    res = curriculum_data.get_curriculum(reg, deg, dept, sem)
+    if res:
+        return jsonify(res)
+    return jsonify({"success": False, "error": "Curriculum not found"}), 404
+
+
 @app.route("/api/syllabus/parse", methods=["POST"])
 @creator_or_admin_required
 def api_syllabus_parse():
@@ -959,9 +980,10 @@ def api_syllabus_import():
             if existing_sub:
                 sub_id = dict(existing_sub)["id"]
                 conn.execute(
-                    "UPDATE subject SET abbreviation=?, periods_per_week=?, difficulty_level=?, is_lab=?, lab_duration=? WHERE id=?",
-                    (s_abbr, s_periods, s_diff, s_is_lab, s_lab_dur, sub_id)
+                    "UPDATE subject SET abbreviation=?, periods_per_week=?, difficulty_level=?, is_lab=?, lab_duration=?, lab_staff2_id=? WHERE id=?",
+                    (s_abbr, s_periods, s_diff, s_is_lab, s_lab_dur, int(lab_staff2_id) if lab_staff2_id else None, sub_id)
                 )
+
             else:
                 sub_id = conn.insert(
                     "INSERT INTO subject (institution_id, subject_name, subject_code, abbreviation, department, "

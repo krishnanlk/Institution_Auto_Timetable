@@ -462,69 +462,56 @@ def parse_text_with_regex(text: str, dept: str) -> Dict[str, List[Dict[str, Any]
 
 
 def get_regulation_presets() -> Dict[str, Any]:
-    """Pre-loaded standard Anna University Regulation 2021 Curriculum Presets."""
-    return {
-        "Anna University - R2021 CSE (Semester 3)": {
-            "department": "CSE",
-            "semester": "Semester 3",
-            "regulation": "Anna University R2021",
-            "class_name": "II CSE - A (Sem 3)",
-            "subjects": [
-                {"subject_code": "MA3354", "subject_name": "Discrete Mathematics", "abbreviation": "DM", "department": "CSE", "periods_per_week": 4, "is_lab": False, "lab_duration": 0, "difficulty_level": 5, "credits": 4},
-                {"subject_code": "CS3351", "subject_name": "Digital Principles and Computer Organization", "abbreviation": "DPCO", "department": "CSE", "periods_per_week": 4, "is_lab": False, "lab_duration": 0, "difficulty_level": 4, "credits": 4},
-                {"subject_code": "CS3352", "subject_name": "Foundations of Data Science", "abbreviation": "FDS", "department": "CSE", "periods_per_week": 3, "is_lab": False, "lab_duration": 0, "difficulty_level": 4, "credits": 3},
-                {"subject_code": "CS3301", "subject_name": "Data Structures", "abbreviation": "DS", "department": "CSE", "periods_per_week": 3, "is_lab": False, "lab_duration": 0, "difficulty_level": 4, "credits": 3},
-                {"subject_code": "CS3391", "subject_name": "Object Oriented Programming", "abbreviation": "OOP", "department": "CSE", "periods_per_week": 3, "is_lab": False, "lab_duration": 0, "difficulty_level": 4, "credits": 3},
-                {"subject_code": "CS3381", "subject_name": "Data Structures Laboratory", "abbreviation": "DS LAB", "department": "CSE", "periods_per_week": 3, "is_lab": True, "lab_duration": 3, "difficulty_level": 3, "credits": 1.5},
-                {"subject_code": "CS3361", "subject_name": "Object Oriented Programming Laboratory", "abbreviation": "OOP LAB", "department": "CSE", "periods_per_week": 3, "is_lab": True, "lab_duration": 3, "difficulty_level": 3, "credits": 1.5},
-                {"subject_code": "GE3361", "subject_name": "Professional Development", "abbreviation": "PD LAB", "department": "CSE", "periods_per_week": 2, "is_lab": True, "lab_duration": 2, "difficulty_level": 2, "credits": 1}
-            ]
-        },
-        "Anna University - R2021 CSE (Semester 4)": {
-            "department": "CSE",
-            "semester": "Semester 4",
-            "regulation": "Anna University R2021",
-            "class_name": "II CSE - B (Sem 4)",
-            "subjects": [
-                {"subject_code": "CS3452", "subject_name": "Theory of Computation", "abbreviation": "TOC", "department": "CSE", "periods_per_week": 4, "is_lab": False, "lab_duration": 0, "difficulty_level": 5, "credits": 4},
-                {"subject_code": "CS3491", "subject_name": "Artificial Intelligence and Machine Learning", "abbreviation": "AIML", "department": "CSE", "periods_per_week": 4, "is_lab": False, "lab_duration": 0, "difficulty_level": 4, "credits": 4},
-                {"subject_code": "CS3492", "subject_name": "Database Management Systems", "abbreviation": "DBMS", "department": "CSE", "periods_per_week": 3, "is_lab": False, "lab_duration": 0, "difficulty_level": 4, "credits": 3},
-                {"subject_code": "CS3401", "subject_name": "Algorithms", "abbreviation": "DAA", "department": "CSE", "periods_per_week": 3, "is_lab": False, "lab_duration": 0, "difficulty_level": 4, "credits": 3},
-                {"subject_code": "CS3451", "subject_name": "Introduction to Operating Systems", "abbreviation": "OS", "department": "CSE", "periods_per_week": 3, "is_lab": False, "lab_duration": 0, "difficulty_level": 4, "credits": 3},
-                {"subject_code": "GE3451", "subject_name": "Environmental Sciences and Sustainability", "abbreviation": "EVS", "department": "CSE", "periods_per_week": 2, "is_lab": False, "lab_duration": 0, "difficulty_level": 2, "credits": 2},
-                {"subject_code": "CS3461", "subject_name": "Database Management Systems Laboratory", "abbreviation": "DBMS LAB", "department": "CSE", "periods_per_week": 3, "is_lab": True, "lab_duration": 3, "difficulty_level": 3, "credits": 1.5},
-                {"subject_code": "CS3481", "subject_name": "Operating Systems Laboratory", "abbreviation": "OS LAB", "department": "CSE", "periods_per_week": 3, "is_lab": True, "lab_duration": 3, "difficulty_level": 3, "credits": 1.5}
-            ]
-        },
-        "Anna University - R2021 ECE (Semester 3)": {
-            "department": "ECE",
-            "semester": "Semester 3",
-            "regulation": "Anna University R2021",
-            "class_name": "II ECE - A (Sem 3)",
-            "subjects": [
-                {"subject_code": "MA3355", "subject_name": "Random Processes and Linear Algebra", "abbreviation": "RPLA", "department": "ECE", "periods_per_week": 4, "is_lab": False, "lab_duration": 0, "difficulty_level": 5, "credits": 4},
-                {"subject_code": "EC3354", "subject_name": "Signals and Systems", "abbreviation": "SS", "department": "ECE", "periods_per_week": 4, "is_lab": False, "lab_duration": 0, "difficulty_level": 4, "credits": 4},
-                {"subject_code": "EC3353", "subject_name": "Electronic Devices and Circuits", "abbreviation": "EDC", "department": "ECE", "periods_per_week": 3, "is_lab": False, "lab_duration": 0, "difficulty_level": 4, "credits": 3},
-                {"subject_code": "EC3351", "subject_name": "Control Systems", "abbreviation": "CS", "department": "ECE", "periods_per_week": 3, "is_lab": False, "lab_duration": 0, "difficulty_level": 4, "credits": 3},
-                {"subject_code": "EC3352", "subject_name": "Digital Systems Design", "abbreviation": "DSD", "department": "ECE", "periods_per_week": 3, "is_lab": False, "lab_duration": 0, "difficulty_level": 4, "credits": 3},
-                {"subject_code": "EC3361", "subject_name": "Electronic Devices and Circuits Laboratory", "abbreviation": "EDC LAB", "department": "ECE", "periods_per_week": 3, "is_lab": True, "lab_duration": 3, "difficulty_level": 3, "credits": 1.5},
-                {"subject_code": "EC3362", "subject_name": "Digital Systems Design Laboratory", "abbreviation": "DSD LAB", "department": "ECE", "periods_per_week": 3, "is_lab": True, "lab_duration": 3, "difficulty_level": 3, "credits": 1.5}
-            ]
-        },
-        "Anna University - R2021 MECH (Semester 3)": {
-            "department": "MECH",
-            "semester": "Semester 3",
-            "regulation": "Anna University R2021",
-            "class_name": "II MECH - A (Sem 3)",
-            "subjects": [
-                {"subject_code": "MA3351", "subject_name": "Transforms and Partial Differential Equations", "abbreviation": "TPDE", "department": "MECH", "periods_per_week": 4, "is_lab": False, "lab_duration": 0, "difficulty_level": 5, "credits": 4},
-                {"subject_code": "ME3351", "subject_name": "Engineering Thermodynamics", "abbreviation": "THERMO", "department": "MECH", "periods_per_week": 4, "is_lab": False, "lab_duration": 0, "difficulty_level": 4, "credits": 4},
-                {"subject_code": "ME3391", "subject_name": "Fluid Mechanics and Machinery", "abbreviation": "FMM", "department": "MECH", "periods_per_week": 4, "is_lab": False, "lab_duration": 0, "difficulty_level": 4, "credits": 4},
-                {"subject_code": "ME3392", "subject_name": "Engineering Materials and Metallurgy", "abbreviation": "EMM", "department": "MECH", "periods_per_week": 3, "is_lab": False, "lab_duration": 0, "difficulty_level": 3, "credits": 3},
-                {"subject_code": "ME3393", "subject_name": "Manufacturing Processes", "abbreviation": "MP", "department": "MECH", "periods_per_week": 3, "is_lab": False, "lab_duration": 0, "difficulty_level": 3, "credits": 3},
-                {"subject_code": "ME3381", "subject_name": "Fluid Mechanics and Machinery Laboratory", "abbreviation": "FMM LAB", "department": "MECH", "periods_per_week": 3, "is_lab": True, "lab_duration": 3, "difficulty_level": 3, "credits": 1.5},
-                {"subject_code": "ME3382", "subject_name": "Manufacturing Technology Laboratory", "abbreviation": "MT LAB", "department": "MECH", "periods_per_week": 3, "is_lab": True, "lab_duration": 3, "difficulty_level": 3, "credits": 1.5}
-            ]
-        }
-    }
+    """Pre-loaded standard Anna University Curricula across R2021, R2023, R2025."""
+    try:
+        import curriculum_data
+        presets = {}
+        # Populate key highlighted presets from R2021, R2023, and R2025
+        # R2021
+        for key in [
+            ("B.E.", "CSE", "Semester 1"),
+            ("B.E.", "CSE", "Semester 3"),
+            ("B.E.", "CSE", "Semester 4"),
+            ("B.E.", "CSE", "Semester 5"),
+            ("B.Tech.", "IT", "Semester 3"),
+            ("B.Tech.", "AIDS", "Semester 3"),
+            ("B.E.", "ECE", "Semester 3"),
+            ("B.E.", "EEE", "Semester 3"),
+            ("B.E.", "MECH", "Semester 3"),
+            ("B.E.", "CIVIL", "Semester 3"),
+            ("B.Tech.", "CSBS", "Semester 3"),
+            ("B.E.", "CYBER", "Semester 3"),
+            ("B.E.", "BME", "Semester 3"),
+        ]:
+            c = curriculum_data.get_curriculum("R2021", key[0], key[1], key[2])
+            if c:
+                presets[f"AU R2021 - {key[1]} ({key[2]})"] = c
 
+        # R2023
+        for key in [
+            ("B.E.", "CSE", "Semester 3"),
+            ("B.E.", "CSE", "Semester 4"),
+            ("B.Tech.", "IT", "Semester 3"),
+            ("B.Tech.", "AIDS", "Semester 3"),
+            ("B.E.", "ECE", "Semester 3"),
+            ("B.E.", "MECH", "Semester 3"),
+        ]:
+            c = curriculum_data.get_curriculum("R2023", key[0], key[1], key[2])
+            if c:
+                presets[f"AU R2023 (Autonomous) - {key[1]} ({key[2]})"] = c
+
+        # R2025
+        for key in [
+            ("B.E.", "CSE", "Semester 3"),
+            ("B.E.", "CSE", "Semester 4"),
+            ("B.Tech.", "AIDS", "Semester 3"),
+            ("B.E.", "ECE", "Semester 3"),
+            ("B.E.", "MECH", "Semester 3"),
+        ]:
+            c = curriculum_data.get_curriculum("R2025", key[0], key[1], key[2])
+            if c:
+                presets[f"AU R2025 (AI & Industry 5.0) - {key[1]} ({key[2]})"] = c
+
+        return presets
+    except Exception as e:
+        return {}
