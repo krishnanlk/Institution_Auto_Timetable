@@ -589,10 +589,14 @@ def seed_inbuilt_curricula_if_empty(conn):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def seed_demo_institution():
-    """Seed a demo institution with sample staff, subjects, and classes."""
+    """Seed a demo institution with sample staff, subjects, and classes.
+    
+    Always ensures DEMO2024 exists regardless of other institutions in the DB.
+    This makes the demo account reliably available on Vercel and other deployments.
+    """
     with get_db() as conn:
-        if conn.execute("SELECT 1 FROM institution LIMIT 1").fetchone():
-            return  # Already seeded
+        if conn.execute("SELECT 1 FROM institution WHERE code='DEMO2024'").fetchone():
+            return  # Demo already seeded
 
         # Institution
         inst_id = conn.insert(
