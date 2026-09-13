@@ -137,7 +137,8 @@ def validate_before_generate(institution_id: int) -> list[str]:
 
         for cls in classes:
             subjs = conn.execute("""
-                SELECT s.id, s.subject_name, s.periods_per_week, s.is_lab, s.lab_duration
+                SELECT s.id, s.subject_name, s.periods_per_week, s.is_lab, s.lab_duration,
+                       s.lab_staff2_id, s.is_mentor_meeting
                 FROM subject s JOIN class_subjects cs ON cs.subject_id=s.id WHERE cs.class_id=?
             """, (cls["id"],)).fetchall()
 
@@ -152,6 +153,18 @@ def validate_before_generate(institution_id: int) -> list[str]:
                     f"{slots_per_week} slots available ({len(days)} days × {len(teaching_slots)} periods)."
                 )
 
+            # Check mentor meeting has a mentor assigned
+            mm_subjects = [s for s in subjs if s["is_mentor_meeting"]]
+            if mm_subjects:
+                mentor_rows = conn.execute(
+                    "SELECT staff_id FROM class_mentor WHERE class_id=?", (cls["id"],)
+                ).fetchall()
+                if not mentor_rows:
+                    warnings.append(
+                        f"Class '{cls['name']}' has Mentor Meeting subjects but NO mentor assigned. "
+                        "Assign mentors via Classes → Edit → Mentors."
+                    )
+
             for subj in subjs:
                 eligible_count = conn.execute("""
                     SELECT COUNT(*) as cnt FROM staff st
@@ -161,6 +174,13 @@ def validate_before_generate(institution_id: int) -> list[str]:
                 if eligible_count == 0:
                     warnings.append(
                         f"'{subj['subject_name']}' in {cls['name']} has NO eligible staff assigned."
+                    )
+
+                # Warn if lab has no secondary staff
+                if subj["is_lab"] and not subj["lab_staff2_id"]:
+                    warnings.append(
+                        f"Lab '{subj['subject_name']}' in {cls['name']} has no secondary (co-teacher) staff set. "
+                        "The lab will be assigned to a single teacher. Consider setting a second lab staff."
                     )
 
         if not conn.execute("SELECT 1 FROM staff WHERE institution_id=?", (institution_id,)).fetchone():
@@ -191,6 +211,7 @@ def _best_staff(
     exp_map: dict,
     avail_map: dict,
     institution_id: int,
+    exclude_staff_id: Optional[int] = None,
 ) -> Optional[int]:
     """
     Score-based staff selector. Returns best available staff_id or None.
@@ -199,6 +220,7 @@ def _best_staff(
       2. Has not exceeded weekly period limit
       3. Has not exceeded daily period limit (max_periods_per_day)
       4. Available on this day (available_days)
+      5. Not equal to exclude_staff_id (e.g. secondary lab staff)
     """
     busy_set = staff_busy.get((day, slot_order), set())
 
@@ -210,6 +232,8 @@ def _best_staff(
     ).fetchall():
         sid = row["staff_id"]
 
+        if exclude_staff_id and sid == exclude_staff_id:
+            continue
         if sid in busy_set:
             continue
         if alloc_counts.get(sid, 0) >= max_p.get(sid, 20):
@@ -241,19 +265,28 @@ def _best_staff(
 def _mark_slot(
     conn, institution_id: int, tt_id: int,
     day: str, slot_order: int, cls_id: int, subj_id: int, staff_id: int,
-    staff_busy: dict, class_busy: dict, alloc_counts: dict, staff_daily: dict
+    staff_busy: dict, class_busy: dict, alloc_counts: dict, staff_daily: dict,
+    staff2_id: Optional[int] = None
 ):
-    """Insert a slot record and update all in-memory tracking dicts."""
+    """Insert a slot record and update all in-memory tracking dicts.
+    If staff2_id is provided (lab co-teacher) it is also stored and marked busy.
+    """
     conn.execute(
         "INSERT INTO timetable_slot "
-        "(institution_id,timetable_id,day,period,class_id,subject_id,staff_id) "
-        "VALUES (?,?,?,?,?,?,?)",
-        (institution_id, tt_id, day, slot_order, cls_id, subj_id, staff_id)
+        "(institution_id,timetable_id,day,period,class_id,subject_id,staff_id,staff2_id) "
+        "VALUES (?,?,?,?,?,?,?,?)",
+        (institution_id, tt_id, day, slot_order, cls_id, subj_id, staff_id, staff2_id)
     )
     staff_busy.setdefault((day, slot_order), set()).add(staff_id)
+    if staff2_id:
+        staff_busy.setdefault((day, slot_order), set()).add(staff2_id)
     class_busy[(cls_id, day, slot_order)] = True
     alloc_counts[staff_id] = alloc_counts.get(staff_id, 0) + 1
+    if staff2_id:
+        alloc_counts[staff2_id] = alloc_counts.get(staff2_id, 0) + 1
     staff_daily[(staff_id, day)] = staff_daily.get((staff_id, day), 0) + 1
+    if staff2_id:
+        staff_daily[(staff2_id, day)] = staff_daily.get((staff2_id, day), 0) + 1
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -357,67 +390,104 @@ def generate_timetable_iter(institution_id: int, name: str = "Auto Generated") -
                 "msg": f"Found {total_labs} lab sessions, {total_lecs} lecture periods. Placing labs first…"
             }
 
+            # ── Load per-class mentor assignments ──────────────────────────
+            # {cls_id: [staff_id, ...]}  (1 or 2 mentors)
+            class_mentors: dict[int, list[int]] = {}
+            for row in conn.execute(
+                "SELECT class_id, staff_id FROM class_mentor WHERE class_id IN "
+                f"(SELECT id FROM class_section WHERE institution_id={institution_id}) "
+                "ORDER BY class_id, mentor_order"
+            ).fetchall():
+                class_mentors.setdefault(row["class_id"], []).append(row["staff_id"])
+
+            # Fresh run-level RNG for true random slot selection each generation
+            import time as _time_mod
+            run_rng = random.Random(int(_time_mod.time() * 1000))
+
             # ══════════════════════════════════════════════════════════════
             # PHASE 1: Place lab subjects (consecutive slots required)
+            # Labs use dual-staff: both primary + secondary (lab_staff2_id) must be free.
+            # Slot position is truly random (shuffled per run).
             # ══════════════════════════════════════════════════════════════
             labs_placed = 0
 
-            # Sort classes and rotate starting days so classes don't all contend on Monday
             for cls_idx, (cls_id, cls_name, subj, reps, duration) in enumerate(all_labs):
-                subj_id  = subj["id"]
+                subj_id   = subj["id"]
+                staff2_id = subj.get("lab_staff2_id")   # may be None
 
                 for rep_idx in range(reps):
                     placed = False
 
-                    # Days prioritized by fewest occupied slots for this class + rotated by class index
-                    rotated_days = days[cls_idx % len(days):] + days[:cls_idx % len(days)]
-                    candidate_days = sorted(
-                        rotated_days,
+                    # Shuffle days freshly so labs don't cluster on the same day
+                    candidate_days = list(days)
+                    run_rng.shuffle(candidate_days)
+                    # Secondary sort: prefer days with fewest class slots used
+                    candidate_days.sort(
                         key=lambda d: sum(1 for so in teaching_slots if class_busy.get((cls_id, d, so)))
                     )
 
                     for day in candidate_days:
-                        # Get free teaching slots for this class on this day
+                        # Free teaching slots for this class on this day
                         free_slots = [
                             so for so in teaching_slots
                             if not class_busy.get((cls_id, day, so))
                         ]
 
+                        # Shuffle the free slots so labs land in a random position
+                        run_rng.shuffle(free_slots)
+
                         # Find `duration` consecutive free teaching slots
                         for i in range(len(free_slots) - duration + 1):
                             group = free_slots[i:i + duration]
 
-                            # ── Verify no break/lunch between the group ──
-                            if _has_break_between(conn, institution_id, group):
+                            # Must be numerically consecutive (no break between)
+                            group_sorted = sorted(group)
+                            if group_sorted != list(range(group_sorted[0], group_sorted[0] + duration)):
                                 continue
-                            # Must be numerically consecutive slot_orders
-                            if list(group) != list(range(group[0], group[0] + duration)):
+                            if _has_break_between(conn, institution_id, group_sorted):
                                 continue
 
-                            # Find a staff member free for all slots
+                            # ── Find primary staff free for ALL slots in the group ──
+                            # Check first slot to get candidate, then verify the rest
                             staff_id = _best_staff(
-                                conn, subj_id, subj["difficulty_level"], day, group[0],
+                                conn, subj_id, subj["difficulty_level"], day, group_sorted[0],
                                 staff_busy, alloc_counts, max_p, max_pd, staff_daily,
-                                exp_map, avail_map, institution_id
+                                exp_map, avail_map, institution_id,
+                                exclude_staff_id=staff2_id
                             )
                             if not staff_id:
                                 continue
 
-                            # Verify staff is free for every slot in the group
-                            if any(staff_id in staff_busy.get((day, so), set()) for so in group):
+                            # Primary must be free across ALL group slots
+                            if any(staff_id in staff_busy.get((day, so), set()) for so in group_sorted):
                                 continue
 
-                            # Verify daily limit for all lab slots
-                            daily_after = staff_daily.get((staff_id, day), 0) + duration
-                            if daily_after > max_pd.get(staff_id, 4):
+                            # Primary daily limit check across all lab periods
+                            if staff_daily.get((staff_id, day), 0) + duration > max_pd.get(staff_id, 4):
                                 continue
 
-                            # ── Place the lab ──────────────────────────────
-                            for so in group:
+                            # ── Secondary staff (co-teacher) availability check ──
+                            if staff2_id:
+                                # Staff2 must also be free for all slots
+                                if any(staff2_id in staff_busy.get((day, so), set()) for so in group_sorted):
+                                    continue
+                                # Staff2 daily limit
+                                if staff_daily.get((staff2_id, day), 0) + duration > max_pd.get(staff2_id, 4):
+                                    continue
+                                # Staff2 weekly limit
+                                if alloc_counts.get(staff2_id, 0) + duration > max_p.get(staff2_id, 20):
+                                    continue
+                                # Staff2 available on this day
+                                if day[:3] not in avail_map.get(staff2_id, "Mon,Tue,Wed,Thu,Fri"):
+                                    continue
+
+                            # ── Place the lab ──────────────────────────────────
+                            for so in group_sorted:
                                 _mark_slot(
                                     conn, institution_id, tt_id,
                                     day, so, cls_id, subj_id, staff_id,
-                                    staff_busy, class_busy, alloc_counts, staff_daily
+                                    staff_busy, class_busy, alloc_counts, staff_daily,
+                                    staff2_id=staff2_id
                                 )
                             placed = True
                             break
@@ -425,8 +495,8 @@ def generate_timetable_iter(institution_id: int, name: str = "Auto Generated") -
                             break
 
                     if not placed:
-                        reason = f"No consecutive {duration}-period block found for lab (all days checked)"
-                        action = "Reduce lab_duration or add more working days/period slots"
+                        reason = f"No consecutive {duration}-period block found where both lab staff are free (all days checked)"
+                        action = "Reduce lab_duration, add more working days/period slots, or check secondary staff availability"
                         conflicts.append({
                             "class": cls_name, "subject": subj["subject_name"],
                             "day": "—", "period": 0,
@@ -495,12 +565,16 @@ def generate_timetable_iter(institution_id: int, name: str = "Auto Generated") -
                     # - Shared faculty across multiple classes (like Maths/Physics) placed first
                     # - Single-faculty subjects placed earlier
                     # - High-frequency courses (4-5 periods/wk) placed earlier
-                    weight = (
-                        max_shared * 200
-                        + staff_scarcity * 100
-                        + s_dict["periods_per_week"] * 15
-                        + s_dict["difficulty_level"] * 4
-                    )
+                    is_this_mm = bool(s_dict.get("is_mentor_meeting")) or "mentor" in (s_dict.get("subject_name") or "").lower() or (s_dict.get("subject_code") or "").upper().startswith("MM")
+                    if is_this_mm:
+                        weight = 10000  # Highest priority to secure slots where both assigned mentors are free
+                    else:
+                        weight = (
+                            max_shared * 200
+                            + staff_scarcity * 100
+                            + s_dict["periods_per_week"] * 15
+                            + s_dict["difficulty_level"] * 4
+                        )
 
                     for rep in range(s_dict["periods_per_week"]):
                         lecture_units.append({
@@ -530,6 +604,7 @@ def generate_timetable_iter(institution_id: int, name: str = "Auto Generated") -
             class_slot_subj: dict = {}  # (cls_id, day, slot_order) -> subj_id
             class_slot_staff: dict = {} # (cls_id, day, slot_order) -> staff_id
             class_slot_id: dict = {}    # (cls_id, day, slot_order) -> slot_row_id
+            unplaced_units: list[dict] = []
 
             for unit in lecture_units:
                 cls_id = unit["cls_id"]
@@ -538,15 +613,52 @@ def generate_timetable_iter(institution_id: int, name: str = "Auto Generated") -
                 sid = subj["id"]
                 rep_idx = unit["rep_idx"]
                 placed = False
+                is_mm = bool(subj.get("is_mentor_meeting")) or "mentor" in (subj.get("subject_name") or "").lower() or (subj.get("subject_code") or "").upper().startswith("MM")
 
                 max_allowed_on_day = max(1, math.ceil(subj["periods_per_week"] / len(days)))
 
-                # Deterministic pseudo-random seed per class & subject & repetition to prevent day-sync
-                rng = random.Random(cls_id * 1000 + sid * 37 + rep_idx * 17)
+                # ── Helper: resolve the staff to place for this unit ──────────────
+                def _resolve_staff(day: str, so: int) -> Optional[int]:
+                    """Return a valid staff_id or None.
+                    For MM subjects: only the assigned class mentor(s) may teach it,
+                    and ALL assigned mentors must be free at that slot.
+                    For regular subjects: use the score-based _best_staff selector.
+                    Returns a tuple (primary_staff_id, secondary_staff_id_or_None).
+                    For MM with two mentors both are returned so the slot stores staff2_id.
+                    """
+                    if is_mm:
+                        mentor_list = class_mentors.get(cls_id, [])
+                        if not mentor_list:
+                            # No mentor assigned — fall back to regular selection
+                            s = _best_staff(
+                                conn, sid, subj["difficulty_level"], day, so,
+                                staff_busy, alloc_counts, max_p, max_pd, staff_daily,
+                                exp_map, avail_map, institution_id
+                            )
+                            return (s, None)
+                        # All assigned mentors must be free at this slot
+                        for m_id in mentor_list:
+                            if m_id in staff_busy.get((day, so), set()):
+                                return (None, None)
+                            if staff_daily.get((m_id, day), 0) >= max_pd.get(m_id, 4):
+                                return (None, None)
+                            if alloc_counts.get(m_id, 0) >= max_p.get(m_id, 20):
+                                return (None, None)
+                            if day[:3] not in avail_map.get(m_id, "Mon,Tue,Wed,Thu,Fri"):
+                                return (None, None)
+                        # Return primary mentor + optional secondary mentor
+                        m2 = mentor_list[1] if len(mentor_list) > 1 else None
+                        return (mentor_list[0], m2)
+                    s = _best_staff(
+                        conn, sid, subj["difficulty_level"], day, so,
+                        staff_busy, alloc_counts, max_p, max_pd, staff_daily,
+                        exp_map, avail_map, institution_id
+                    )
+                    return (s, None)
 
-                # ── PASS 1: Strict daily subject cap ──
+                # ── PASS 1: Strict daily subject cap + random slot order ─────
                 candidate_days = list(days)
-                rng.shuffle(candidate_days)
+                run_rng.shuffle(candidate_days)
                 candidate_days.sort(key=lambda d: (
                     class_day_subj.get((cls_id, d), []).count(sid),
                     len([so for so in teaching_slots if class_busy.get((cls_id, d, so))])
@@ -559,22 +671,19 @@ def generate_timetable_iter(institution_id: int, name: str = "Auto Generated") -
                     free_slots = [so for so in teaching_slots if not class_busy.get((cls_id, day, so))]
                     if not free_slots:
                         continue
-                    rng.shuffle(free_slots)
+                    run_rng.shuffle(free_slots)
                     free_slots.sort(key=lambda so: (
                         sum(1 for d in days if class_slot_subj.get((cls_id, d, so)) == sid)
                     ))
 
                     for so in free_slots:
-                        staff_id = _best_staff(
-                            conn, sid, subj["difficulty_level"], day, so,
-                            staff_busy, alloc_counts, max_p, max_pd, staff_daily,
-                            exp_map, avail_map, institution_id
-                        )
+                        staff_id, staff2_id = _resolve_staff(day, so)
                         if staff_id:
                             _mark_slot(
                                 conn, institution_id, tt_id,
                                 day, so, cls_id, sid, staff_id,
-                                staff_busy, class_busy, alloc_counts, staff_daily
+                                staff_busy, class_busy, alloc_counts, staff_daily,
+                                staff2_id=staff2_id
                             )
                             last_id = conn.execute("SELECT MAX(id) as mid FROM timetable_slot").fetchone()["mid"]
                             class_day_subj.setdefault((cls_id, day), []).append(sid)
@@ -591,18 +700,15 @@ def generate_timetable_iter(institution_id: int, name: str = "Auto Generated") -
                 if not placed:
                     for day in candidate_days:
                         free_slots = [so for so in teaching_slots if not class_busy.get((cls_id, day, so))]
-                        rng.shuffle(free_slots)
+                        run_rng.shuffle(free_slots)
                         for so in free_slots:
-                            staff_id = _best_staff(
-                                conn, sid, subj["difficulty_level"], day, so,
-                                staff_busy, alloc_counts, max_p, max_pd, staff_daily,
-                                exp_map, avail_map, institution_id
-                            )
+                            staff_id, staff2_id = _resolve_staff(day, so)
                             if staff_id:
                                 _mark_slot(
                                     conn, institution_id, tt_id,
                                     day, so, cls_id, sid, staff_id,
-                                    staff_busy, class_busy, alloc_counts, staff_daily
+                                    staff_busy, class_busy, alloc_counts, staff_daily,
+                                    staff2_id=staff2_id
                                 )
                                 last_id = conn.execute("SELECT MAX(id) as mid FROM timetable_slot").fetchone()["mid"]
                                 class_day_subj.setdefault((cls_id, day), []).append(sid)
@@ -614,86 +720,212 @@ def generate_timetable_iter(institution_id: int, name: str = "Auto Generated") -
                         if placed:
                             break
 
-                # ── PASS 3: Intelligent Kempe Relocation / Local Swap Search ──
-                # This simulates a human timetable coordinator rearranging a slot to resolve a cross-department clash
+                # Collect unplaced units for the dynamic shifting / backtracking repair phase
                 if not placed:
-                    eligible_staff_set = set(subj_eligible_staff.get(sid, []))
-                    for day in days:
-                        if placed:
-                            break
-                        for so in teaching_slots:
-                            if placed:
+                    unplaced_units.append(unit)
+
+                lec_placed += 1
+                if lec_placed % 4 == 0 or lec_placed == total_units:
+                    pct = 42 + int((lec_placed / max(total_units, 1)) * 40)
+                    yield {"pct": pct, "msg": f"Scheduling multi-department lectures: {lec_placed}/{total_units}"}
+
+            # ══════════════════════════════════════════════════════════════
+            # PHASE 3: DYNAMIC BACKTRACKING & PRE-FITTED CLASS SHIFTING ENGINE
+            # If any bottlenecks / clashes occurred, dynamically shift pre-fitted
+            # slots (inter-class ejections, intra-class vacating, 2-way swaps)
+            # so that every single period is placed with ZERO conflicts.
+            # ══════════════════════════════════════════════════════════════
+            if unplaced_units:
+                yield {
+                    "pct": 84,
+                    "msg": f"Resolving clashes: dynamically shifting {len(unplaced_units)} pre-fitted classes for 0-conflict placement…"
+                }
+
+                def _relocate_slot_entry(slot_row_id: int, c_id: int, from_day: str, from_so: int, to_day: str, to_so: int):
+                    """Atomically relocate a placed slot from (from_day, from_so) to (to_day, to_so)."""
+                    slot_info = conn.execute(
+                        "SELECT subject_id, staff_id, staff2_id FROM timetable_slot WHERE id=?",
+                        (slot_row_id,)
+                    ).fetchone()
+                    if not slot_info:
+                        return
+                    s_id, st_id, st2_id = slot_info["subject_id"], slot_info["staff_id"], slot_info["staff2_id"]
+
+                    conn.execute("UPDATE timetable_slot SET day=?, period=? WHERE id=?", (to_day, to_so, slot_row_id))
+
+                    # Free old slot
+                    class_busy.pop((c_id, from_day, from_so), None)
+                    if st_id:
+                        staff_busy.get((from_day, from_so), set()).discard(st_id)
+                        staff_daily[(st_id, from_day)] = max(0, staff_daily.get((st_id, from_day), 1) - 1)
+                    if st2_id:
+                        staff_busy.get((from_day, from_so), set()).discard(st2_id)
+                        staff_daily[(st2_id, from_day)] = max(0, staff_daily.get((st2_id, from_day), 1) - 1)
+                    if (c_id, from_day) in class_day_subj and s_id in class_day_subj[(c_id, from_day)]:
+                        class_day_subj[(c_id, from_day)].remove(s_id)
+                    class_slot_subj.pop((c_id, from_day, from_so), None)
+                    class_slot_staff.pop((c_id, from_day, from_so), None)
+                    class_slot_id.pop((c_id, from_day, from_so), None)
+
+                    # Occupy new slot
+                    class_busy[(c_id, to_day, to_so)] = True
+                    if st_id:
+                        staff_busy.setdefault((to_day, to_so), set()).add(st_id)
+                        staff_daily[(st_id, to_day)] = staff_daily.get((st_id, to_day), 0) + 1
+                    if st2_id:
+                        staff_busy.setdefault((to_day, to_so), set()).add(st2_id)
+                        staff_daily[(st2_id, to_day)] = staff_daily.get((st2_id, to_day), 0) + 1
+                    class_day_subj.setdefault((c_id, to_day), []).append(s_id)
+                    class_slot_subj[(c_id, to_day, to_so)] = s_id
+                    class_slot_staff[(c_id, to_day, to_so)] = st_id
+                    class_slot_id[(c_id, to_day, to_so)] = slot_row_id
+
+                # Iterative repair loops
+                for repair_round in range(12):
+                    if not unplaced_units:
+                        break
+                    still_unplaced = []
+
+                    for unit in unplaced_units:
+                        c_id = unit["cls_id"]
+                        c_name = unit["cls_name"]
+                        subj = unit["subj"]
+                        sid = subj["id"]
+                        unit_is_mm = bool(subj.get("is_mentor_meeting")) or "mentor" in (subj.get("subject_name") or "").lower() or (subj.get("subject_code") or "").upper().startswith("MM")
+                        el_staff_list = subj_eligible_staff.get(sid, [])
+                        resolved = False
+
+                        # ── Strategy 1: Inter-Class Ejection (shift another class's slot to free shared staff) ──
+                        for day in days:
+                            if resolved:
                                 break
-                            current_subj_here = class_slot_subj.get((cls_id, day, so))
-                            current_staff_here = class_slot_staff.get((cls_id, day, so))
-                            current_slot_id = class_slot_id.get((cls_id, day, so))
-                            if not current_subj_here or not current_staff_here or not current_slot_id:
-                                continue
-
-                            # Check if an eligible faculty for OUR subject is free at (day, so)
-                            candidate_staff = None
-                            for st_candidate in eligible_staff_set:
-                                if st_candidate not in staff_busy.get((day, so), set()):
-                                    if staff_daily.get((st_candidate, day), 0) < max_pd.get(st_candidate, 4):
-                                        if alloc_counts.get(st_candidate, 0) < max_p.get(st_candidate, 20):
-                                            if day[:3] in avail_map.get(st_candidate, "Mon,Tue,Wed,Thu,Fri"):
-                                                candidate_staff = st_candidate
-                                                break
-                            if not candidate_staff:
-                                continue
-
-                            # Can we move current_subj_here to another free slot (alt_day, alt_so) for this class?
-                            for alt_day in days:
-                                if placed:
+                            free_in_this_class = [so for so in teaching_slots if not class_busy.get((c_id, day, so))]
+                            for so in free_in_this_class:
+                                if resolved:
                                     break
-                                alt_free_slots = [s for s in teaching_slots if not class_busy.get((cls_id, alt_day, s))]
-                                for alt_so in alt_free_slots:
-                                    if current_staff_here not in staff_busy.get((alt_day, alt_so), set()):
-                                        if alt_day != day and staff_daily.get((current_staff_here, alt_day), 0) >= max_pd.get(current_staff_here, 4):
-                                            continue
-                                        if alt_day[:3] not in avail_map.get(current_staff_here, "Mon,Tue,Wed,Thu,Fri"):
-                                            continue
+                                # Find candidate staff who could teach our subject here
+                                for st_cand in el_staff_list:
+                                    if st_cand in staff_busy.get((day, so), set()):
+                                        # Faculty is busy here teaching another class. Can we shift that other class?
+                                        other_slot = conn.execute(
+                                            "SELECT ts.id, ts.class_id, ts.subject_id, ts.staff_id, ts.staff2_id, s.is_lab "
+                                            "FROM timetable_slot ts JOIN subject s ON s.id=ts.subject_id "
+                                            "WHERE ts.timetable_id=? AND ts.day=? AND ts.period=? "
+                                            "AND (ts.staff_id=? OR ts.staff2_id=?)",
+                                            (tt_id, day, so, st_cand, st_cand)
+                                        ).fetchone()
+                                        if other_slot and other_slot["class_id"] != c_id and not other_slot["is_lab"]:
+                                            other_cid = other_slot["class_id"]
+                                            other_sid = other_slot["id"]
+                                            other_st1 = other_slot["staff_id"]
+                                            other_st2 = other_slot["staff2_id"]
 
-                                        # Relocate current_subj_here to (alt_day, alt_so)
-                                        conn.execute(
-                                            "UPDATE timetable_slot SET day=?, period=? WHERE id=?",
-                                            (alt_day, alt_so, current_slot_id)
-                                        )
-                                        # Update tracking for the moved slot
-                                        class_busy.pop((cls_id, day, so), None)
-                                        staff_busy.get((day, so), set()).discard(current_staff_here)
-                                        if (cls_id, day) in class_day_subj and current_subj_here in class_day_subj[(cls_id, day)]:
-                                            class_day_subj[(cls_id, day)].remove(current_subj_here)
-                                        staff_daily[(current_staff_here, day)] = max(0, staff_daily.get((current_staff_here, day), 1) - 1)
+                                            # Find an alternative free slot for other_cid where other_st1 & other_st2 are free
+                                            for alt_d in days:
+                                                if resolved:
+                                                    break
+                                                alt_slots = [s for s in teaching_slots if not class_busy.get((other_cid, alt_d, s))]
+                                                for alt_so in alt_slots:
+                                                    if other_st1 not in staff_busy.get((alt_d, alt_so), set()):
+                                                        if other_st2 and other_st2 in staff_busy.get((alt_d, alt_so), set()):
+                                                            continue
+                                                        if alt_d != day and staff_daily.get((other_st1, alt_d), 0) >= max_pd.get(other_st1, 4):
+                                                            continue
+                                                        if alt_d[:3] not in avail_map.get(other_st1, "Mon,Tue,Wed,Thu,Fri"):
+                                                            continue
 
-                                        class_busy[(cls_id, alt_day, alt_so)] = True
-                                        staff_busy.setdefault((alt_day, alt_so), set()).add(current_staff_here)
-                                        class_day_subj.setdefault((cls_id, alt_day), []).append(current_subj_here)
-                                        class_slot_subj[(cls_id, alt_day, alt_so)] = current_subj_here
-                                        class_slot_staff[(cls_id, alt_day, alt_so)] = current_staff_here
-                                        class_slot_id[(cls_id, alt_day, alt_so)] = current_slot_id
-                                        staff_daily[(current_staff_here, alt_day)] = staff_daily.get((current_staff_here, alt_day), 0) + 1
+                                                        # Shift other class's slot to (alt_d, alt_so)!
+                                                        _relocate_slot_entry(other_sid, other_cid, day, so, alt_d, alt_so)
 
-                                        # Place our current subject into the newly vacated (day, so)!
-                                        _mark_slot(
-                                            conn, institution_id, tt_id,
-                                            day, so, cls_id, sid, candidate_staff,
-                                            staff_busy, class_busy, alloc_counts, staff_daily
-                                        )
-                                        new_id = conn.execute("SELECT MAX(id) as mid FROM timetable_slot").fetchone()["mid"]
-                                        class_day_subj.setdefault((cls_id, day), []).append(sid)
-                                        class_slot_subj[(cls_id, day, so)] = sid
-                                        class_slot_staff[(cls_id, day, so)] = candidate_staff
-                                        class_slot_id[(cls_id, day, so)] = new_id
-                                        placed = True
+                                                        # Now st_cand is free at (day, so)! Place our subject
+                                                        _mark_slot(
+                                                            conn, institution_id, tt_id,
+                                                            day, so, c_id, sid, st_cand,
+                                                            staff_busy, class_busy, alloc_counts, staff_daily
+                                                        )
+                                                        new_id = conn.execute("SELECT MAX(id) as mid FROM timetable_slot").fetchone()["mid"]
+                                                        class_day_subj.setdefault((c_id, day), []).append(sid)
+                                                        class_slot_subj[(c_id, day, so)] = sid
+                                                        class_slot_staff[(c_id, day, so)] = st_cand
+                                                        class_slot_id[(c_id, day, so)] = new_id
+                                                        resolved = True
+                                                        break
+
+                        # ── Strategy 2: Intra-Class Vacate (shift another subject in this class to open a slot) ──
+                        if not resolved:
+                            for day in days:
+                                if resolved:
+                                    break
+                                for so in teaching_slots:
+                                    if resolved:
                                         break
+                                    # Who can teach our subject at (day, so)?
+                                    free_staff_for_us = [
+                                        st for st in el_staff_list
+                                        if st not in staff_busy.get((day, so), set())
+                                        and staff_daily.get((st, day), 0) < max_pd.get(st, 4)
+                                        and alloc_counts.get(st, 0) < max_p.get(st, 20)
+                                        and day[:3] in avail_map.get(st, "Mon,Tue,Wed,Thu,Fri")
+                                    ]
+                                    if not free_staff_for_us:
+                                        continue
+                                    chosen_st = free_staff_for_us[0]
 
-                # ── Conflict Logging if All Passes & Swaps Exhausted ──
-                if not placed:
-                    reason = ("No available staff or free slot — all eligible staff are busy or "
-                              "have reached daily/weekly period limits across all departments")
-                    action = (f"Add more faculty for '{subj['subject_name']}' in {cls_name}, "
-                              "increase max_periods_per_week, or adjust working days")
+                                    # If this slot in our class is occupied by another non-lab subject:
+                                    cur_slot_id = class_slot_id.get((c_id, day, so))
+                                    cur_subj_id = class_slot_subj.get((c_id, day, so))
+                                    cur_staff_id = class_slot_staff.get((c_id, day, so))
+
+                                    if cur_slot_id and cur_subj_id and cur_staff_id:
+                                        # Check if it's a lab
+                                        is_cur_lab = conn.execute(
+                                            "SELECT is_lab FROM subject WHERE id=?", (cur_subj_id,)
+                                        ).fetchone()
+                                        if is_cur_lab and is_cur_lab["is_lab"]:
+                                            continue
+
+                                        # Find an alt slot in our class for cur_subj
+                                        for alt_d in days:
+                                            if resolved:
+                                                break
+                                            alt_free = [s for s in teaching_slots if not class_busy.get((c_id, alt_d, s))]
+                                            for alt_so in alt_free:
+                                                if cur_staff_id not in staff_busy.get((alt_d, alt_so), set()):
+                                                    if alt_d != day and staff_daily.get((cur_staff_id, alt_d), 0) >= max_pd.get(cur_staff_id, 4):
+                                                        continue
+                                                    if alt_d[:3] not in avail_map.get(cur_staff_id, "Mon,Tue,Wed,Thu,Fri"):
+                                                        continue
+
+                                                    # Relocate cur_subj to (alt_d, alt_so)
+                                                    _relocate_slot_entry(cur_slot_id, c_id, day, so, alt_d, alt_so)
+
+                                                    # Place our unit in the vacated (day, so)!
+                                                    _mark_slot(
+                                                        conn, institution_id, tt_id,
+                                                        day, so, c_id, sid, chosen_st,
+                                                        staff_busy, class_busy, alloc_counts, staff_daily
+                                                    )
+                                                    new_id = conn.execute("SELECT MAX(id) as mid FROM timetable_slot").fetchone()["mid"]
+                                                    class_day_subj.setdefault((c_id, day), []).append(sid)
+                                                    class_slot_subj[(c_id, day, so)] = sid
+                                                    class_slot_staff[(c_id, day, so)] = chosen_st
+                                                    class_slot_id[(c_id, day, so)] = new_id
+                                                    resolved = True
+                                                    break
+
+                        if not resolved:
+                            still_unplaced.append(unit)
+
+                    unplaced_units = still_unplaced
+
+                # Any units that mathematically cannot fit in the weekly hours log a conflict
+                for unit in unplaced_units:
+                    cls_name = unit["cls_name"]
+                    subj = unit["subj"]
+                    reason = ("Could not place period even after multi-class slot shifting — "
+                              "faculty workload limits or class slot capacity fully exhausted")
+                    action = (f"Add more faculty for '{subj['subject_name']}' in {cls_name} "
+                              "or increase weekly capacity")
                     conflicts.append({
                         "class": cls_name, "subject": subj["subject_name"],
                         "day": "—", "period": 0,
@@ -704,11 +936,6 @@ def generate_timetable_iter(institution_id: int, name: str = "Auto Generated") -
                         "subject_name,day,period,reason,suggested_action) VALUES (?,?,?,?,?,?,?,?)",
                         (institution_id, tt_id, cls_name, subj["subject_name"], "—", 0, reason, action)
                     )
-
-                lec_placed += 1
-                if lec_placed % 4 == 0 or lec_placed == total_units:
-                    pct = 42 + int((lec_placed / max(total_units, 1)) * 46)
-                    yield {"pct": pct, "msg": f"Scheduling multi-department lectures: {lec_placed}/{total_units}"}
 
             # ── Post-processing: GUARANTEE no two days have the exact same period order ──
             for cls in classes:
@@ -824,7 +1051,8 @@ class ConflictDetector:
         staff_id: int,
         class_id: int,
         institution_id: int,
-        exclude_slot_id: Optional[int] = None
+        exclude_slot_id: Optional[int] = None,
+        staff2_id: Optional[int] = None
     ) -> list[dict]:
         """
         Returns a list of conflict dicts. Empty list = no conflicts.
@@ -834,15 +1062,25 @@ class ConflictDetector:
 
         ex = (exclude_slot_id,) if exclude_slot_id else (-1,)
 
-        # Staff clash: same staff in same slot (different class)
+        # Primary staff clash: same staff in same slot (different class)
         if conn.execute(
             "SELECT 1 FROM timetable_slot WHERE timetable_id=? AND day=? AND period=? "
-            "AND staff_id=? AND id!=?",
-            (timetable_id, day, period, staff_id, ex[0])
+            "AND (staff_id=? OR staff2_id=?) AND id!=?",
+            (timetable_id, day, period, staff_id, staff_id, ex[0])
         ).fetchone():
             staff_name = conn.execute("SELECT name FROM staff WHERE id=?", (staff_id,)).fetchone()
             name = dict(staff_name)["name"] if staff_name else "Staff"
             conflicts.append({"type": "staff_clash", "reason": f"{name} is already teaching another class in this slot"})
+
+        # Secondary staff clash:
+        if staff2_id and conn.execute(
+            "SELECT 1 FROM timetable_slot WHERE timetable_id=? AND day=? AND period=? "
+            "AND (staff_id=? OR staff2_id=?) AND id!=?",
+            (timetable_id, day, period, staff2_id, staff2_id, ex[0])
+        ).fetchone():
+            staff2_name = conn.execute("SELECT name FROM staff WHERE id=?", (staff2_id,)).fetchone()
+            name2 = dict(staff2_name)["name"] if staff2_name else "Secondary Staff"
+            conflicts.append({"type": "staff_clash", "reason": f"{name2} is already teaching another class in this slot"})
 
         # Class clash: same class already has a subject in this slot
         if conn.execute(
@@ -912,7 +1150,8 @@ def move_slot(slot_id: int, new_day: str, new_period: int, institution_id: int) 
         conflicts = ConflictDetector.check_slot(
             conn, slot["timetable_id"], new_day, new_period,
             slot["staff_id"], slot["class_id"], institution_id,
-            exclude_slot_id=slot_id
+            exclude_slot_id=slot_id,
+            staff2_id=slot.get("staff2_id")
         )
         if conflicts:
             return False, conflicts[0]["reason"]
@@ -949,13 +1188,15 @@ def swap_slots(slot_id_1: int, slot_id_2: int, institution_id: int) -> tuple[boo
         c1 = ConflictDetector.check_slot(
             conn, s1["timetable_id"], s2["day"], s2["period"],
             s1["staff_id"], s1["class_id"], institution_id,
-            exclude_slot_id=slot_id_2
+            exclude_slot_id=slot_id_2,
+            staff2_id=s1.get("staff2_id")
         )
         # Validate s2's staff in s1's position (excluding s1 itself)
         c2 = ConflictDetector.check_slot(
             conn, s2["timetable_id"], s1["day"], s1["period"],
             s2["staff_id"], s2["class_id"], institution_id,
-            exclude_slot_id=slot_id_1
+            exclude_slot_id=slot_id_1,
+            staff2_id=s2.get("staff2_id")
         )
 
         if c1 or c2:
@@ -997,7 +1238,8 @@ def check_move_valid(slot_id: int, new_day: str, new_period: int, institution_id
         return ConflictDetector.check_slot(
             conn, slot["timetable_id"], new_day, new_period,
             slot["staff_id"], slot["class_id"], institution_id,
-            exclude_slot_id=slot_id
+            exclude_slot_id=slot_id,
+            staff2_id=slot.get("staff2_id")
         )
 
 
@@ -1028,12 +1270,14 @@ def get_class_timetable(class_id: int, institution_id: int) -> tuple[Optional[in
             SELECT ts.day, ts.period, ts.id as slot_id, ts.is_manual_edit,
                    s.subject_name, s.subject_code, s.abbreviation, s.is_lab, s.lab_duration, s.department,
                    st.name as staff_name, st.id as staff_id,
+                   st2.name as staff2_name, ts.staff2_id,
                    cs.name as class_name, cs.department as class_department, cs.semester as class_semester,
                    cs.strength as class_strength, cs.venue as class_venue, cs.academic_year as class_academic_year,
                    s.id as subject_id
             FROM timetable_slot ts
             JOIN subject s  ON s.id  = ts.subject_id
             JOIN staff st   ON st.id = ts.staff_id
+            LEFT JOIN staff st2 ON st2.id = ts.staff2_id
             JOIN class_section cs ON cs.id = ts.class_id
             WHERE ts.class_id=? AND ts.timetable_id=?
         """, (class_id, tt["id"])).fetchall()
@@ -1043,6 +1287,11 @@ def get_class_timetable(class_id: int, institution_id: int) -> tuple[Optional[in
             r_dict = dict(row)
             if not r_dict.get("abbreviation"):
                 r_dict["abbreviation"] = generate_abbreviation(r_dict["subject_name"], bool(r_dict.get("is_lab")))
+            # Build a combined display name for cells with two teachers
+            if r_dict.get("staff2_name"):
+                r_dict["staff_display"] = f"{r_dict['staff_name']} & {r_dict['staff2_name']}"
+            else:
+                r_dict["staff_display"] = r_dict["staff_name"]
             grid[row["day"]][row["period"]] = r_dict
 
         return tt["id"], grid
@@ -1072,10 +1321,12 @@ def get_class_printable_data(class_id: int, institution_id: int) -> Optional[dic
             SELECT ts.day, ts.period, ts.id as slot_id, ts.is_manual_edit,
                    s.subject_name, s.subject_code, s.abbreviation, s.is_lab, s.lab_duration, s.department,
                    st.name as staff_name, st.id as staff_id,
+                   st2.name as staff2_name, ts.staff2_id,
                    s.id as subject_id
             FROM timetable_slot ts
             JOIN subject s  ON s.id  = ts.subject_id
             JOIN staff st   ON st.id = ts.staff_id
+            LEFT JOIN staff st2 ON st2.id = ts.staff2_id
             WHERE ts.class_id=? AND ts.timetable_id=?
             ORDER BY ts.day, ts.period
         """, (class_id, tt["id"])).fetchall()
@@ -1088,21 +1339,31 @@ def get_class_printable_data(class_id: int, institution_id: int) -> Optional[dic
             r_dict = dict(row)
             abbr = r_dict.get("abbreviation") or generate_abbreviation(r_dict["subject_name"], bool(r_dict.get("is_lab")))
             r_dict["abbreviation"] = abbr
-            grid[row["day"]][row["period"]] = r_dict
+            # Build combined display name
+            if r_dict.get("staff2_name"):
+                r_dict["staff_display"] = f"{r_dict['staff_name']} & {r_dict['staff2_name']}"
+            else:
+                r_dict["staff_display"] = r_dict["staff_name"]
+            grid[r_dict["day"]][r_dict["period"]] = r_dict
 
-            sid = row["subject_id"]
-            code = row["subject_code"] or f"CS{sid:04d}"
-            target = lab_courses if row["is_lab"] else theory_courses
+            sid = r_dict["subject_id"]
+            code = r_dict["subject_code"] or f"CS{sid:04d}"
+            target = lab_courses if r_dict["is_lab"] else theory_courses
             if sid not in target:
                 target[sid] = {
                     "abbr": abbr,
                     "code": code,
-                    "name": row["subject_name"],
-                    "faculty": [row["staff_name"]],
+                    "name": r_dict["subject_name"],
+                    "faculty": [r_dict["staff_name"]],
                 }
+                # Add co-teacher immediately for labs
+                if r_dict.get("staff2_name") and r_dict["staff2_name"] not in target[sid]["faculty"]:
+                    target[sid]["faculty"].append(r_dict["staff2_name"])
             else:
-                if row["staff_name"] not in target[sid]["faculty"]:
-                    target[sid]["faculty"].append(row["staff_name"])
+                if r_dict["staff_name"] not in target[sid]["faculty"]:
+                    target[sid]["faculty"].append(r_dict["staff_name"])
+                if r_dict.get("staff2_name") and r_dict["staff2_name"] not in target[sid]["faculty"]:
+                    target[sid]["faculty"].append(r_dict["staff2_name"])
 
         for t in [theory_courses, lab_courses]:
             for sid, c in t.items():
@@ -1185,7 +1446,7 @@ def get_class_printable_data(class_id: int, institution_id: int) -> Optional[dic
                     "abbreviation": cell.get("abbreviation") or cell.get("subject_name", ""),
                     "subject_name": cell.get("subject_name", ""),
                     "subject_code": cell.get("subject_code", ""),
-                    "staff_name": cell.get("staff_name", ""),
+                    "staff_name": cell.get("staff_display") or cell.get("staff_name", ""),
                 })
 
             day_rows.append({
@@ -1221,20 +1482,29 @@ def get_staff_timetable(staff_id: int, institution_id: int) -> tuple[Optional[in
             return None, {}
 
         days = get_working_days(institution_id)
+        # Fetch slots where this staff is PRIMARY teacher or CO-TEACHER (staff2)
         slots = conn.execute("""
             SELECT ts.day, ts.period, ts.id as slot_id,
                    s.subject_name, s.is_lab, s.department,
-                   st.name as staff_name, cs.name as class_name, s.id as subject_id
+                   st.name as staff_name,
+                   st2.name as staff2_name,
+                   cs.name as class_name, s.id as subject_id
             FROM timetable_slot ts
             JOIN subject s  ON s.id  = ts.subject_id
             JOIN staff st   ON st.id = ts.staff_id
+            LEFT JOIN staff st2 ON st2.id = ts.staff2_id
             JOIN class_section cs ON cs.id = ts.class_id
-            WHERE ts.staff_id=? AND ts.timetable_id=?
-        """, (staff_id, tt["id"])).fetchall()
+            WHERE (ts.staff_id=? OR ts.staff2_id=?) AND ts.timetable_id=?
+        """, (staff_id, staff_id, tt["id"])).fetchall()
 
         grid = {day: {} for day in days}
         for row in slots:
-            grid[row["day"]][row["period"]] = dict(row)
+            r_dict = dict(row)
+            if r_dict.get("staff2_name"):
+                r_dict["staff_display"] = f"{r_dict['staff_name']} & {r_dict['staff2_name']}"
+            else:
+                r_dict["staff_display"] = r_dict["staff_name"]
+            grid[row["day"]][row["period"]] = r_dict
 
         return tt["id"], grid
 

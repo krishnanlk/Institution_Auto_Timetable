@@ -290,6 +290,8 @@ CREATE TABLE IF NOT EXISTS subject (
     difficulty_level INTEGER DEFAULT 3,
     is_lab           INTEGER DEFAULT 0,
     lab_duration     INTEGER DEFAULT 2,
+    lab_staff2_id    INTEGER REFERENCES staff(id) ON DELETE SET NULL,
+    is_mentor_meeting INTEGER DEFAULT 0,
     created_at       TEXT DEFAULT (datetime('now'))
 );
 
@@ -342,9 +344,18 @@ CREATE TABLE IF NOT EXISTS timetable_slot (
     class_id        INTEGER REFERENCES class_section(id) ON DELETE CASCADE,
     subject_id      INTEGER REFERENCES subject(id) ON DELETE CASCADE,
     staff_id        INTEGER REFERENCES staff(id) ON DELETE CASCADE,
+    staff2_id       INTEGER REFERENCES staff(id) ON DELETE SET NULL,
     room_id         INTEGER REFERENCES rooms(id) ON DELETE SET NULL,
     is_manual_edit  INTEGER DEFAULT 0,
     created_at      TEXT DEFAULT (datetime('now'))
+);
+
+-- ── Class Mentors ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS class_mentor (
+    class_id      INTEGER NOT NULL REFERENCES class_section(id) ON DELETE CASCADE,
+    staff_id      INTEGER NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+    mentor_order  INTEGER DEFAULT 1,
+    PRIMARY KEY (class_id, staff_id)
 );
 
 -- ── Conflict Log ──────────────────────────────────────────────
@@ -402,22 +413,40 @@ def generate_abbreviation(name: str, is_lab: bool = False) -> str:
 _MIGRATION_SQL_SQLITE = [
     "ALTER TABLE staff ADD COLUMN max_periods_per_day INTEGER DEFAULT 4",
     "ALTER TABLE timetable_slot ADD COLUMN room_id INTEGER REFERENCES rooms(id) ON DELETE SET NULL",
+    "ALTER TABLE timetable_slot ADD COLUMN staff2_id INTEGER REFERENCES staff(id) ON DELETE SET NULL",
     "ALTER TABLE subject ADD COLUMN abbreviation TEXT",
+    "ALTER TABLE subject ADD COLUMN lab_staff2_id INTEGER REFERENCES staff(id) ON DELETE SET NULL",
+    "ALTER TABLE subject ADD COLUMN is_mentor_meeting INTEGER DEFAULT 0",
     "ALTER TABLE institution ADD COLUMN logo_url TEXT DEFAULT ''",
     "ALTER TABLE institution ADD COLUMN institution_type TEXT DEFAULT 'college'",
     "ALTER TABLE class_section ADD COLUMN venue TEXT DEFAULT ''",
     "ALTER TABLE class_section ADD COLUMN academic_year TEXT DEFAULT '2026-27'",
+    """CREATE TABLE IF NOT EXISTS class_mentor (
+        class_id      INTEGER NOT NULL REFERENCES class_section(id) ON DELETE CASCADE,
+        staff_id      INTEGER NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+        mentor_order  INTEGER DEFAULT 1,
+        PRIMARY KEY (class_id, staff_id)
+    )""",
 ]
 
 # PostgreSQL migration (same intent, PostgreSQL syntax)
 _MIGRATION_SQL_PG = [
     "ALTER TABLE staff ADD COLUMN IF NOT EXISTS max_periods_per_day INTEGER DEFAULT 4",
     "ALTER TABLE timetable_slot ADD COLUMN IF NOT EXISTS room_id INTEGER REFERENCES rooms(id) ON DELETE SET NULL",
+    "ALTER TABLE timetable_slot ADD COLUMN IF NOT EXISTS staff2_id INTEGER REFERENCES staff(id) ON DELETE SET NULL",
     "ALTER TABLE subject ADD COLUMN IF NOT EXISTS abbreviation TEXT",
+    "ALTER TABLE subject ADD COLUMN IF NOT EXISTS lab_staff2_id INTEGER REFERENCES staff(id) ON DELETE SET NULL",
+    "ALTER TABLE subject ADD COLUMN IF NOT EXISTS is_mentor_meeting INTEGER DEFAULT 0",
     "ALTER TABLE institution ADD COLUMN IF NOT EXISTS logo_url TEXT DEFAULT ''",
     "ALTER TABLE institution ADD COLUMN IF NOT EXISTS institution_type TEXT DEFAULT 'college'",
     "ALTER TABLE class_section ADD COLUMN IF NOT EXISTS venue TEXT DEFAULT ''",
     "ALTER TABLE class_section ADD COLUMN IF NOT EXISTS academic_year TEXT DEFAULT '2026-27'",
+    """CREATE TABLE IF NOT EXISTS class_mentor (
+        class_id      INTEGER NOT NULL REFERENCES class_section(id) ON DELETE CASCADE,
+        staff_id      INTEGER NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+        mentor_order  INTEGER DEFAULT 1,
+        PRIMARY KEY (class_id, staff_id)
+    )""",
 ]
 
 
@@ -441,6 +470,8 @@ def init_db():
                 if not r["abbreviation"]:
                     auto_abbr = generate_abbreviation(r["subject_name"], bool(r["is_lab"]))
                     conn.execute("UPDATE subject SET abbreviation=? WHERE id=?", (auto_abbr, r["id"]))
+            # Auto-flag mentor meeting subjects
+            conn.execute("UPDATE subject SET is_mentor_meeting=1 WHERE LOWER(subject_name) LIKE '%mentor%' OR UPPER(subject_code) LIKE 'MM%'")
         except Exception:
             pass
 

@@ -391,7 +391,7 @@ function renderGrid(containerId, ttId, grid, days, periodSlots, viewType) {
           </div>
           <div class="slot-subject">${cell.subject_name}</div>
           ${isMerged ? `<div class="slot-merge-time"><i class="fas fa-clock me-1"></i>${mergeTimeLabel}</div>` : ''}
-          <div class="slot-staff"><i class="fas fa-user-circle me-1"></i>${viewType === 'staff' ? cell.class_name : cell.staff_name}</div>
+          <div class="slot-staff"><i class="fas fa-user-circle me-1"></i>${viewType === 'staff' ? cell.class_name : (cell.staff_display || cell.staff_name)}</div>
         </div>`;
       } else if (isDroppable) {
         html += `<div class="slot-empty-drop" title="Drop a slot here"></div>`;

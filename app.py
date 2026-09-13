@@ -645,7 +645,8 @@ def subjects_page():
     iid = inst_id()
     with get_db() as conn:
         rows = conn.execute("SELECT * FROM subject WHERE institution_id=? ORDER BY subject_name", (iid,)).fetchall()
-    return render_template("subjects.html", subjects=[dict(r) for r in rows])
+        staff_rows = conn.execute("SELECT id, name, department FROM staff WHERE institution_id=? ORDER BY name", (iid,)).fetchall()
+    return render_template("subjects.html", subjects=[dict(r) for r in rows], staff_list=[dict(r) for r in staff_rows])
 
 
 @app.route("/api/subjects", methods=["GET"])
@@ -665,13 +666,16 @@ def api_add_subject():
     abbr = (d.get("abbreviation") or "").strip()
     if not abbr:
         abbr = generate_abbreviation(d["subject_name"], bool(int(d.get("is_lab", 0))))
+    lab_staff2 = d.get("lab_staff2_id") or None
+    is_mm = int(bool(d.get("is_mentor_meeting", False)))
     with get_db() as conn:
         new_id = conn.insert(
             "INSERT INTO subject (institution_id,subject_name,subject_code,abbreviation,department,"
-            "periods_per_week,difficulty_level,is_lab,lab_duration) VALUES (?,?,?,?,?,?,?,?,?)",
+            "periods_per_week,difficulty_level,is_lab,lab_duration,lab_staff2_id,is_mentor_meeting) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (iid, d["subject_name"], d.get("subject_code", ""), abbr, d["department"],
              int(d.get("periods_per_week", 3)), int(d.get("difficulty_level", 3)),
-             int(d.get("is_lab", 0)), int(d.get("lab_duration", 2)))
+             int(d.get("is_lab", 0)), int(d.get("lab_duration", 2)),
+             int(lab_staff2) if lab_staff2 else None, is_mm)
         )
     return jsonify({"success": True, "id": new_id})
 
@@ -684,13 +688,16 @@ def api_update_subject(sid):
     abbr = (d.get("abbreviation") or "").strip()
     if not abbr:
         abbr = generate_abbreviation(d["subject_name"], bool(int(d.get("is_lab", 0))))
+    lab_staff2 = d.get("lab_staff2_id") or None
+    is_mm = int(bool(d.get("is_mentor_meeting", False)))
     with get_db() as conn:
         conn.execute(
             "UPDATE subject SET subject_name=?,subject_code=?,abbreviation=?,department=?,periods_per_week=?,"
-            "difficulty_level=?,is_lab=?,lab_duration=? WHERE id=? AND institution_id=?",
+            "difficulty_level=?,is_lab=?,lab_duration=?,lab_staff2_id=?,is_mentor_meeting=? WHERE id=? AND institution_id=?",
             (d["subject_name"], d.get("subject_code", ""), abbr, d["department"],
              int(d.get("periods_per_week", 3)), int(d.get("difficulty_level", 3)),
-             int(d.get("is_lab", 0)), int(d.get("lab_duration", 2)), sid, iid)
+             int(d.get("is_lab", 0)), int(d.get("lab_duration", 2)),
+             int(lab_staff2) if lab_staff2 else None, is_mm, sid, iid)
         )
     return jsonify({"success": True})
 
@@ -721,6 +728,7 @@ def classes_page():
     with get_db() as conn:
         cls_rows  = conn.execute("SELECT * FROM class_section WHERE institution_id=? ORDER BY name", (iid,)).fetchall()
         subj_rows = conn.execute("SELECT * FROM subject WHERE institution_id=? ORDER BY subject_name", (iid,)).fetchall()
+        staff_rows = conn.execute("SELECT id, name, department FROM staff WHERE institution_id=? ORDER BY name", (iid,)).fetchall()
         classes = []
         for c in cls_rows:
             c = dict(c)
@@ -728,8 +736,16 @@ def classes_page():
                 SELECT s.subject_name FROM subject s
                 JOIN class_subjects cs ON cs.subject_id=s.id WHERE cs.class_id=?
             """, (c["id"],)).fetchall()]
-            classes.append({**c, "subject_names": snames})
-    return render_template("classes.html", classes=classes, subjects=[dict(r) for r in subj_rows])
+            mentor_rows = conn.execute(
+                "SELECT cm.staff_id, st.name as staff_name FROM class_mentor cm "
+                "JOIN staff st ON st.id=cm.staff_id WHERE cm.class_id=? ORDER BY cm.mentor_order",
+                (c["id"],)
+            ).fetchall()
+            mentors = [dict(m) for m in mentor_rows]
+            classes.append({**c, "subject_names": snames, "mentors": mentors})
+    return render_template("classes.html", classes=classes,
+                           subjects=[dict(r) for r in subj_rows],
+                           staff_list=[dict(r) for r in staff_rows])
 
 
 @app.route("/api/classes", methods=["GET"])
@@ -744,7 +760,10 @@ def api_get_classes():
             sids = [r["subject_id"] for r in conn.execute(
                 "SELECT subject_id FROM class_subjects WHERE class_id=?", (c["id"],)
             ).fetchall()]
-            result.append({**c, "subjects": sids})
+            mentor_ids = [r["staff_id"] for r in conn.execute(
+                "SELECT staff_id FROM class_mentor WHERE class_id=? ORDER BY mentor_order", (c["id"],)
+            ).fetchall()]
+            result.append({**c, "subjects": sids, "mentor_ids": mentor_ids})
     return jsonify(result)
 
 
@@ -760,7 +779,10 @@ def api_get_one_class(cid):
         sids = [r["subject_id"] for r in conn.execute(
             "SELECT subject_id FROM class_subjects WHERE class_id=?", (cid,)
         ).fetchall()]
-    return jsonify({**c, "subjects": sids})
+        mentor_ids = [r["staff_id"] for r in conn.execute(
+            "SELECT staff_id FROM class_mentor WHERE class_id=? ORDER BY mentor_order", (cid,)
+        ).fetchall()]
+    return jsonify({**c, "subjects": sids, "mentor_ids": mentor_ids})
 
 
 @app.route("/api/classes", methods=["POST"])
@@ -775,6 +797,12 @@ def api_add_class():
         )
         for sid2 in d.get("subjects", []):
             conn.execute("INSERT OR IGNORE INTO class_subjects VALUES (?,?)", (new_id, sid2))
+        # Save mentors
+        conn.execute("DELETE FROM class_mentor WHERE class_id=?", (new_id,))
+        for order, m_id in enumerate(d.get("mentor_ids", [])[:2], start=1):
+            if m_id:
+                conn.execute("INSERT OR IGNORE INTO class_mentor (class_id,staff_id,mentor_order) VALUES (?,?,?)",
+                             (new_id, int(m_id), order))
     return jsonify({"success": True, "id": new_id})
 
 
@@ -791,6 +819,45 @@ def api_update_class(cid):
         conn.execute("DELETE FROM class_subjects WHERE class_id=?", (cid,))
         for sid2 in d.get("subjects", []):
             conn.execute("INSERT OR IGNORE INTO class_subjects VALUES (?,?)", (cid, sid2))
+        # Save mentors (max 2)
+        conn.execute("DELETE FROM class_mentor WHERE class_id=?", (cid,))
+        for order, m_id in enumerate(d.get("mentor_ids", [])[:2], start=1):
+            if m_id:
+                conn.execute("INSERT OR IGNORE INTO class_mentor (class_id,staff_id,mentor_order) VALUES (?,?,?)",
+                             (cid, int(m_id), order))
+    return jsonify({"success": True})
+
+
+@app.route("/api/classes/<int:cid>/mentors", methods=["GET"])
+@login_required
+def api_get_class_mentors(cid):
+    iid = inst_id()
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT cm.staff_id, st.name, cm.mentor_order FROM class_mentor cm "
+            "JOIN staff st ON st.id=cm.staff_id WHERE cm.class_id=? "
+            "AND st.institution_id=? ORDER BY cm.mentor_order",
+            (cid, iid)
+        ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/classes/<int:cid>/mentors", methods=["PUT"])
+@creator_or_admin_required
+def api_set_class_mentors(cid):
+    iid = inst_id()
+    d = request.get_json() or {}
+    with get_db() as conn:
+        # Verify class belongs to this institution
+        if not conn.execute("SELECT 1 FROM class_section WHERE id=? AND institution_id=?", (cid, iid)).fetchone():
+            return jsonify({"success": False, "error": "Class not found"}), 404
+        conn.execute("DELETE FROM class_mentor WHERE class_id=?", (cid,))
+        for order, m_id in enumerate(d.get("mentor_ids", [])[:2], start=1):
+            if m_id:
+                conn.execute(
+                    "INSERT OR IGNORE INTO class_mentor (class_id,staff_id,mentor_order) VALUES (?,?,?)",
+                    (cid, int(m_id), order)
+                )
     return jsonify({"success": True})
 
 
@@ -998,7 +1065,7 @@ def api_export_csv(class_id):
             if s["slot_type"] != "period":
                 row.append(f"── {s['label']} ──")
             elif cell:
-                row.append(f"{cell['subject_name']} ({cell['staff_name']})")
+                row.append(f"{cell['subject_name']} ({cell.get('staff_display') or cell['staff_name']})")
             else:
                 row.append("")
         writer.writerow(row)
