@@ -71,7 +71,24 @@ class VercelPathFixMiddleware:
 
 app.wsgi_app = VercelPathFixMiddleware(app.wsgi_app)
 
-# ══════════════════════════════════════════════════════════════════════════════
+@app.route("/api/debug-db")
+def api_debug_db():
+    info = {
+        "backend": DB_BACKEND,
+        "has_database_url": bool(os.environ.get("DATABASE_URL")),
+    }
+    try:
+        init_db()
+        seed_demo_institution()
+        with get_db() as conn:
+            insts = [dict(r) for r in conn.execute("SELECT id, name, code FROM institution").fetchall()]
+            users = [dict(r) for r in conn.execute("SELECT id, institution_id, username FROM users").fetchall()]
+            info["institutions"] = insts
+            info["users"] = users
+            info["status"] = "OK"
+    except Exception as e:
+        info["error"] = str(e)
+    return jsonify(info)
 # ROOT
 # ══════════════════════════════════════════════════════════════════════════════
 
