@@ -57,17 +57,23 @@
     </div>
 
     <div class="panel-body p-4">
-      <!-- Regulation Pills -->
-      <div class="d-flex flex-wrap gap-2 mb-3" id="regPillsContainer">
-        <button type="button" class="btn btn-sm reg-tab active" id="btnReg2021" onclick="switchRegulationTab('R2021')">
-          <i class="fas fa-check-circle me-1"></i> R2021 (CBCS Affiliated)
-        </button>
-        <button type="button" class="btn btn-sm reg-tab" id="btnReg2023" onclick="switchRegulationTab('R2023')">
-          R2023 (Autonomous / AICTE)
-        </button>
-        <button type="button" class="btn btn-sm reg-tab" id="btnReg2025" onclick="switchRegulationTab('R2025')">
-          R2025 (NextGen AI & Industry 5.0)
-        </button>
+      <!-- Regulation Pills with Smooth Sliding Blue Glider -->
+      <div class="mb-3 d-inline-block">
+        <div class="reg-segmented-track" id="regTrack">
+          <div class="reg-glider" id="regGlider"></div>
+          <button type="button" class="reg-tab-btn active" id="btnReg_R2021" onclick="switchRegulationTab('R2021')">
+            <span class="reg-tab-icon"><i class="fas fa-check-circle"></i></span>
+            <span class="reg-tab-text">R2021 (CBCS Affiliated)</span>
+          </button>
+          <button type="button" class="reg-tab-btn" id="btnReg_R2023" onclick="switchRegulationTab('R2023')">
+            <span class="reg-tab-icon"><i class="fas fa-check-circle"></i></span>
+            <span class="reg-tab-text">R2023 (Autonomous / AICTE)</span>
+          </button>
+          <button type="button" class="reg-tab-btn" id="btnReg_R2025" onclick="switchRegulationTab('R2025')">
+            <span class="reg-tab-icon"><i class="fas fa-check-circle"></i></span>
+            <span class="reg-tab-text">R2025 (NextGen AI & Industry 5.0)</span>
+          </button>
+        </div>
       </div>
 
       <!-- Filter Bar -->
@@ -346,36 +352,81 @@
 .mode-title { font-weight: 700; color: #1e293b; margin-bottom: 2px; }
 .mode-desc { font-size: 0.82rem; color: #64748b; margin-bottom: 0; line-height: 1.3; }
 
-.reg-tab {
-  font-weight: 600;
-  border-radius: 20px;
-  padding: 8px 18px;
-  font-size: 13.5px;
-  border: 1.5px solid #cbd5e1 !important;
-  background: #ffffff !important;
-  color: #475569 !important;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+/* Smooth Sliding Regulation Segmented Control */
+.reg-segmented-track {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  position: relative;
+  background: #f1f5f9;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 30px;
+  padding: 4px;
+  gap: 2px;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.04);
 }
-.reg-tab:hover {
-  border-color: #818cf8 !important;
-  color: #4338ca !important;
-  background: #f5f3ff !important;
+
+.reg-glider {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  height: calc(100% - 8px);
+  width: 0;
+  background: linear-gradient(135deg, #4f46e5, #6366f1);
+  border-radius: 26px;
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.38);
+  transition: left 0.35s cubic-bezier(0.34, 1.2, 0.64, 1), width 0.35s cubic-bezier(0.34, 1.2, 0.64, 1);
+  pointer-events: none;
+  z-index: 1;
 }
-.reg-tab.active,
-.reg-tab.active:hover,
-.reg-tab.active:focus {
-  background: #4f46e5 !important;
+
+.reg-tab-btn {
+  position: relative;
+  z-index: 2;
+  border: none;
+  background: transparent;
+  padding: 8px 18px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #64748b;
+  border-radius: 26px;
+  cursor: pointer;
+  transition: color 0.25s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  outline: none;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.reg-tab-btn:hover:not(.active) {
+  color: #4338ca;
+}
+
+.reg-tab-btn.active {
   color: #ffffff !important;
-  border-color: #4f46e5 !important;
-  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35) !important;
+  font-weight: 700;
 }
-.reg-tab.active i {
-  color: #ffffff !important;
+
+.reg-tab-btn .reg-tab-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0;
+  opacity: 0;
+  transform: scale(0.6);
+  margin-right: 0;
+  overflow: hidden;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease, transform 0.25s cubic-bezier(0.34, 1.5, 0.64, 1), margin-right 0.25s ease;
+  color: #ffffff;
+  font-size: 12.5px;
+}
+
+.reg-tab-btn.active .reg-tab-icon {
+  width: 15px;
+  opacity: 1;
+  transform: scale(1);
+  margin-right: 6px;
 }
 
 .syllabus-filter-bar {
@@ -501,9 +552,12 @@
 {% endblock %}
 
 {% block scripts %}
+<script id="staffData" type="application/json">
+{{ staff_list | tojson }}
+</script>
 <script>
-// Available faculty from database
-const STAFF_LIST = {{ staff_list | tojson }};
+// Available faculty from database parsed safely from JSON script block
+const STAFF_LIST = JSON.parse(document.getElementById('staffData')?.textContent || '[]');
 let parsedData = null;
 let currentSemKey = "";
 let currentSubjects = [];
@@ -516,6 +570,27 @@ const REGULATION_TITLES = {
   'R2023': 'R2023 (Autonomous / AICTE)',
   'R2025': 'R2025 (NextGen AI & Industry 5.0)'
 };
+
+// Computes position and smoothly transfers blue glider pill
+function updateGlider(reg) {
+  const glider = document.getElementById('regGlider');
+  const track = document.getElementById('regTrack');
+  const targetBtn = document.getElementById(`btnReg_${reg}`);
+  if (!glider || !track || !targetBtn) return;
+
+  const trackRect = track.getBoundingClientRect();
+  const btnRect = targetBtn.getBoundingClientRect();
+
+  const left = btnRect.left - trackRect.left;
+  const width = btnRect.width;
+
+  glider.style.left = `${left}px`;
+  glider.style.width = `${width}px`;
+}
+
+window.addEventListener('resize', () => {
+  if (selectedRegTab) updateGlider(selectedRegTab);
+});
 
 // Reactive filter changes: Degree, Dept, or Semester
 async function onNavFilterChange(field) {
@@ -560,17 +635,21 @@ function selectMode(mode) {
 function switchRegulationTab(reg) {
   selectedRegTab = reg;
   ['R2021', 'R2023', 'R2025'].forEach(r => {
-    const btn = document.getElementById(`btnReg${r}`);
+    const btn = document.getElementById(`btnReg_${r}`);
     if (btn) {
       if (r === reg) {
         btn.classList.add('active');
-        btn.innerHTML = `<i class="fas fa-check-circle me-1"></i> ${REGULATION_TITLES[r]}`;
       } else {
         btn.classList.remove('active');
-        btn.innerHTML = REGULATION_TITLES[r];
       }
     }
   });
+
+  // Smooth transfer animation for the blue glider pill
+  requestAnimationFrame(() => {
+    updateGlider(reg);
+  });
+
   autoLoadFromNav(false);
 }
 
@@ -999,7 +1078,11 @@ async function submitImport(generateImmediately = false) {
   }
 }
 
-// Initial load: immediately render default Semester 1 curriculum from reactive nav
+// Initial load: initialize glider position and immediately render default Semester 1 curriculum
+requestAnimationFrame(() => {
+  updateGlider(selectedRegTab);
+  setTimeout(() => updateGlider(selectedRegTab), 60);
+});
 autoLoadFromNav(false);
 </script>
 {% endblock %}
