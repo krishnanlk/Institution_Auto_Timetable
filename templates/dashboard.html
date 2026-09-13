@@ -12,8 +12,44 @@
 {% if active_timetable %}
 <div class="banner banner-success"><i class="fas fa-check-circle"></i> Active timetable: <strong>{{ active_timetable.name }}</strong> — {{ active_timetable.generated_at }}{% if active_timetable.conflicts > 0 %} <span class="badge bg-danger ms-2">{{ active_timetable.conflicts }} conflict(s)</span>{% else %} <span class="badge bg-success ms-2">No conflicts</span>{% endif %}</div>
 {% else %}
-<div class="banner banner-warn"><i class="fas fa-exclamation-triangle"></i> No active timetable. <a href="/timetable">Generate one now →</a></div>
+<div class="banner banner-warn"><i class="fas fa-exclamation-triangle"></i> No active timetable yet. Choose your workflow below to configure and generate.</div>
 {% endif %}
+
+<!-- Quick Setup Flow Selection -->
+<div class="row g-3 mb-4">
+  <div class="col-md-6">
+    <div class="card-panel p-3 h-100 d-flex flex-column justify-content-between" style="border-left: 4px solid var(--primary);">
+      <div>
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span class="badge bg-primary"><i class="fas fa-magic me-1"></i> Smart Auto-Setup</span>
+          <span class="badge bg-light text-dark border">Anna University / Autonomous</span>
+        </div>
+        <h4 class="fw-bold mb-1">Import from Syllabus PDF</h4>
+        <p class="text-muted small mb-3">Upload your regulation PDF (R2017/R2021) or choose curriculum presets. Automatically extracts subject codes, L-T-P-C credits, lab durations, and difficulty levels.</p>
+      </div>
+      <a href="/syllabus-import" class="btn btn-primary btn-sm fw-bold align-self-start"><i class="fas fa-file-import me-1"></i> Open Syllabus Importer →</a>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card-panel p-3 h-100 d-flex flex-column justify-content-between" style="border-left: 4px solid #10b981;">
+      <div>
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span class="badge bg-success"><i class="fas fa-pen-to-square me-1"></i> Manual Setup</span>
+          <span class="badge bg-light text-dark border">Current Flow</span>
+        </div>
+        <h4 class="fw-bold mb-1">Start from Scratch</h4>
+        <p class="text-muted small mb-3">Manually configure staff members, classroom and lab rooms, individual subjects, and assign custom teacher workloads before scheduling.</p>
+      </div>
+      <div class="d-flex gap-2">
+        <a href="/subjects" class="btn btn-outline-secondary btn-sm"><i class="fas fa-book me-1"></i> Subjects</a>
+        <a href="/classes" class="btn btn-outline-secondary btn-sm"><i class="fas fa-door-open me-1"></i> Classes</a>
+        <a href="/staff" class="btn btn-outline-secondary btn-sm"><i class="fas fa-users me-1"></i> Staff</a>
+      </div>
+    </div>
+  </div>
+</div>
+
 
 <div class="two-col-grid">
   <div class="card-panel">

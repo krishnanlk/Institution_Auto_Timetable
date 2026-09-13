@@ -30,6 +30,7 @@
       <span class="nav-label">MAIN</span>
       <a href="/dashboard" class="nav-item {% if request.path in ('/','/dashboard') %}active{% endif %}"><i class="fas fa-th-large"></i><span>Dashboard</span></a>
       <span class="nav-label">MANAGE</span>
+      <a href="/syllabus-import" class="nav-item {% if '/syllabus-import' in request.path %}active{% endif %}" style="background:rgba(99,102,241,0.08);"><i class="fas fa-file-import text-primary"></i><span class="fw-bold">Import Syllabus</span></a>
       <a href="/staff"    class="nav-item {% if '/staff'    in request.path %}active{% endif %}"><i class="fas fa-users"></i><span>Staff</span></a>
       <a href="/subjects" class="nav-item {% if '/subjects' in request.path %}active{% endif %}"><i class="fas fa-book"></i><span>Subjects</span></a>
       <a href="/classes"  class="nav-item {% if '/classes'  in request.path %}active{% endif %}"><i class="fas fa-door-open"></i><span>Classes</span></a>

@@ -20,6 +20,7 @@ from scheduler import (
 )
 from auth import login_required, admin_required, creator_or_admin_required, inject_user, get_current_user
 from config import FLASK_SECRET_KEY, DB_BACKEND
+import syllabus_parser
 
 app = Flask(__name__)
 app.secret_key = FLASK_SECRET_KEY
@@ -870,9 +871,156 @@ def api_delete_class(cid):
     return jsonify({"success": True})
 
 
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SYLLABUS & CURRICULUM IMPORTER
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/syllabus-import")
+@login_required
+def syllabus_import_page():
+    iid = inst_id()
+    with get_db() as conn:
+        staff_rows = conn.execute("SELECT id, name, department FROM staff WHERE institution_id=? ORDER BY name", (iid,)).fetchall()
+        rooms_rows = conn.execute("SELECT id, name, room_type FROM rooms WHERE institution_id=? ORDER BY name", (iid,)).fetchall()
+    return render_template("syllabus_import.html", staff_list=[dict(r) for r in staff_rows], rooms_list=[dict(r) for r in rooms_rows])
+
+
+@app.route("/api/syllabus/presets", methods=["GET"])
+@login_required
+def api_syllabus_presets():
+    return jsonify(syllabus_parser.get_regulation_presets())
+
+
+@app.route("/api/syllabus/parse", methods=["POST"])
+@creator_or_admin_required
+def api_syllabus_parse():
+    if "syllabus_pdf" not in request.files:
+        return jsonify({"success": False, "error": "No PDF file uploaded"}), 400
+    file = request.files["syllabus_pdf"]
+    if file.filename == "":
+        return jsonify({"success": False, "error": "No file selected"}), 400
+    
+    file_bytes = file.read()
+    if len(file_bytes) == 0:
+        return jsonify({"success": False, "error": "Uploaded file is empty"}), 400
+        
+    result = syllabus_parser.parse_syllabus_pdf(file_bytes)
+    return jsonify(result)
+
+
+@app.route("/api/syllabus/import", methods=["POST"])
+@creator_or_admin_required
+def api_syllabus_import():
+    iid = inst_id()
+    d = request.get_json() or {}
+    
+    class_name = (d.get("class_name") or "").strip()
+    department = (d.get("department") or "CSE").strip()
+    semester = int(d.get("semester", 3))
+    strength = int(d.get("strength", 60))
+    subjects = d.get("subjects", [])
+    
+    if not class_name:
+        return jsonify({"success": False, "error": "Class name is required"}), 400
+    if not subjects:
+        return jsonify({"success": False, "error": "At least one subject must be selected"}), 400
+
+    created_subject_ids = []
+    with get_db() as conn:
+        for s in subjects:
+            s_name = (s.get("subject_name") or "").strip()
+            s_code = (s.get("subject_code") or "").strip()
+            s_abbr = (s.get("abbreviation") or "").strip()
+            if not s_abbr:
+                s_abbr = syllabus_parser.generate_abbreviation(s_name, bool(s.get("is_lab")))
+            s_dept = (s.get("department") or department).strip()
+            s_periods = int(s.get("periods_per_week", 3))
+            s_diff = int(s.get("difficulty_level", 3))
+            s_is_lab = 1 if s.get("is_lab") else 0
+            s_lab_dur = int(s.get("lab_duration", 2)) if s_is_lab else 0
+            staff_id = s.get("assigned_staff_id")
+            lab_staff2_id = s.get("lab_staff2_id")
+
+            # Check if subject already exists for this institution
+            existing_sub = None
+            if s_code:
+                existing_sub = conn.execute(
+                    "SELECT id FROM subject WHERE institution_id=? AND subject_code=?",
+                    (iid, s_code)
+                ).fetchone()
+            if not existing_sub:
+                existing_sub = conn.execute(
+                    "SELECT id FROM subject WHERE institution_id=? AND subject_name=? AND department=?",
+                    (iid, s_name, s_dept)
+                ).fetchone()
+
+            if existing_sub:
+                sub_id = dict(existing_sub)["id"]
+                conn.execute(
+                    "UPDATE subject SET abbreviation=?, periods_per_week=?, difficulty_level=?, is_lab=?, lab_duration=? WHERE id=?",
+                    (s_abbr, s_periods, s_diff, s_is_lab, s_lab_dur, sub_id)
+                )
+            else:
+                sub_id = conn.insert(
+                    "INSERT INTO subject (institution_id, subject_name, subject_code, abbreviation, department, "
+                    "periods_per_week, difficulty_level, is_lab, lab_duration, lab_staff2_id, is_mentor_meeting) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
+                    (iid, s_name, s_code, s_abbr, s_dept, s_periods, s_diff, s_is_lab, s_lab_dur, int(lab_staff2_id) if lab_staff2_id else None)
+                )
+
+            created_subject_ids.append(sub_id)
+
+            # Assign faculty to subject if provided
+            if staff_id:
+                conn.execute(
+                    "INSERT OR IGNORE INTO staff_subjects (staff_id, subject_id) VALUES (?, ?)",
+                    (int(staff_id), sub_id)
+                )
+            if lab_staff2_id:
+                conn.execute(
+                    "INSERT OR IGNORE INTO staff_subjects (staff_id, subject_id) VALUES (?, ?)",
+                    (int(lab_staff2_id), sub_id)
+                )
+
+        # Create or update Class Section
+        existing_cls = conn.execute(
+            "SELECT id FROM class_section WHERE institution_id=? AND name=?",
+            (iid, class_name)
+        ).fetchone()
+
+        if existing_cls:
+            class_id = dict(existing_cls)["id"]
+            conn.execute(
+                "UPDATE class_section SET department=?, semester=?, strength=? WHERE id=?",
+                (department, semester, strength, class_id)
+            )
+        else:
+            class_id = conn.insert(
+                "INSERT INTO class_section (institution_id, name, department, semester, strength) VALUES (?, ?, ?, ?, ?)",
+                (iid, class_name, department, semester, strength)
+            )
+
+        # Link all subjects to this class
+        for sub_id in created_subject_ids:
+            conn.execute(
+                "INSERT OR IGNORE INTO class_subjects (class_id, subject_id) VALUES (?, ?)",
+                (class_id, sub_id)
+            )
+
+    return jsonify({
+        "success": True,
+        "class_id": class_id,
+        "created_subjects_count": len(created_subject_ids),
+        "message": f"Successfully created class '{class_name}' with {len(created_subject_ids)} subjects."
+    })
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # TIMETABLE
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 @app.route("/timetable")
 @login_required

@@ -1,0 +1,775 @@
+{% extends "base.html" %}
+{% block title %}Import Syllabus – SchedHub{% endblock %}
+{% block page_title %}Syllabus & Regulation Importer{% endblock %}
+{% block topbar_actions %}
+<a href="/subjects" class="btn-outline-sm me-2"><i class="fas fa-book me-1"></i>Subject List</a>
+<a href="/classes" class="btn-primary-sm"><i class="fas fa-door-open me-1"></i>Class List</a>
+{% endblock %}
+
+{% block content %}
+<div class="syllabus-container">
+  <!-- Mode Selection Hero -->
+  <div class="card-panel setup-hero mb-4">
+    <div class="hero-text">
+      <div class="hero-badge"><i class="fas fa-graduation-cap me-1"></i> Curriculum & Regulation Engine</div>
+      <h2>Setup Timetable from Curriculum Syllabus</h2>
+      <p>Import official Anna University (R2017 / R2021 / R2025) or Autonomous College Regulation books. The AI parser extracts subject codes, L-T-P-C structures, lab durations, and difficulty levels automatically.</p>
+    </div>
+    <div class="hero-actions">
+      <button class="btn btn-outline-light btn-sm" onclick="document.getElementById('manualChoiceModal') && new bootstrap.Modal(document.getElementById('manualChoiceModal')).show()">
+        <i class="fas fa-info-circle me-1"></i> How It Works
+      </button>
+    </div>
+  </div>
+
+  <!-- Dual Mode Selection Cards -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-6">
+      <div class="mode-card active-mode" id="cardPdfMode" onclick="selectMode('pdf')">
+        <div class="mode-icon blue"><i class="fas fa-file-pdf"></i></div>
+        <div class="mode-body">
+          <div class="mode-title">Upload Syllabus PDF <span class="badge bg-primary ms-1">Recommended</span></div>
+          <p class="mode-desc">Drop Anna University regulation booklet or semester syllabus PDF. We automatically extract and compute all parameters.</p>
+        </div>
+        <div class="mode-radio"><i class="fas fa-check-circle text-primary"></i></div>
+      </div>
+    </div>
+
+    <div class="col-md-6">
+      <div class="mode-card" id="cardPresetMode" onclick="selectMode('preset')">
+        <div class="mode-icon purple"><i class="fas fa-bolt"></i></div>
+        <div class="mode-body">
+          <div class="mode-title">Load Regulation Presets (1-Click)</div>
+          <p class="mode-desc">Instant templates for Anna University R2021 (CSE, ECE, MECH) Semesters 3 to 6 with pre-configured credits and lab hours.</p>
+        </div>
+        <div class="mode-radio"><i class="far fa-circle text-muted"></i></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 1: PDF UPLOAD DROPZONE -->
+  <div id="sectionPdfUpload" class="card-panel mb-4">
+    <div class="panel-head">
+      <div>
+        <h3><i class="fas fa-cloud-arrow-up text-primary me-2"></i>Drop Syllabus or Regulation Document</h3>
+        <span class="panel-sub">Supports Anna University Curriculum PDFs, Autonomous syllabus books, or scanned course schedules (.pdf)</span>
+      </div>
+    </div>
+
+    <div class="pdf-dropzone" id="pdfDropzone" onclick="document.getElementById('pdfInput').click()">
+      <input type="file" id="pdfInput" accept=".pdf" style="display:none" onchange="handleFileSelected(event)"/>
+      <div class="dz-content">
+        <div class="dz-icon"><i class="fas fa-file-invoice fa-3x text-primary mb-3"></i></div>
+        <h5 class="fw-bold mb-1">Click to Browse or Drag & Drop Syllabus PDF</h5>
+        <p class="text-muted small mb-3">Anna University Regulation PDF, Autonomous College Curriculum Book, or Semester Syllabus</p>
+        <button type="button" class="btn btn-primary btn-sm px-4"><i class="fas fa-folder-open me-2"></i>Choose PDF File</button>
+      </div>
+      <div class="dz-loading d-none" id="dzLoading">
+        <div class="spinner-border text-primary mb-3" role="status"></div>
+        <h6 class="fw-bold">Analyzing Curriculum & Extracting Subjects...</h6>
+        <p class="text-muted small">Extracting L-T-P-C columns, computing lab durations and difficulty scores</p>
+      </div>
+    </div>
+
+    <div id="fileInfoRow" class="file-info-row d-none mt-3">
+      <div class="d-flex align-items-center gap-2">
+        <i class="fas fa-file-pdf text-danger fa-lg"></i>
+        <span id="fileNameDisplay" class="fw-bold">document.pdf</span>
+        <span id="fileSizeDisplay" class="badge bg-secondary">0 KB</span>
+      </div>
+      <button class="btn btn-sm btn-outline-danger" onclick="resetFileUpload()"><i class="fas fa-times me-1"></i>Remove</button>
+    </div>
+  </div>
+
+  <!-- SECTION 2: REGULATION PRESET PICKER -->
+  <div id="sectionPresetPicker" class="card-panel mb-4 d-none">
+    <div class="panel-head">
+      <div>
+        <h3><i class="fas fa-bookmark text-warning me-2"></i>Choose Pre-Configured Regulation Template</h3>
+        <span class="panel-sub">Official Anna University Regulation 2021 curriculum structures ready to import</span>
+      </div>
+    </div>
+    <div class="row g-3" id="presetsListRow">
+      <div class="col-12 text-center py-4 text-muted"><div class="spinner-border spinner-border-sm text-primary me-2"></div>Loading presets...</div>
+    </div>
+  </div>
+
+  <!-- SECTION 3: EXTRACTED CURRICULUM REVIEW & MAPPING WORKSPACE -->
+  <div id="sectionReview" class="card-panel mb-4 d-none">
+    <div class="panel-head border-bottom pb-3 mb-3">
+      <div class="d-flex flex-wrap align-items-center justify-content-between w-100 gap-2">
+        <div>
+          <div class="d-flex align-items-center gap-2 mb-1">
+            <span class="badge bg-success" id="badgeRegulation">Anna University R2021</span>
+            <span class="badge bg-info text-dark" id="badgeDept">CSE</span>
+            <span class="badge bg-secondary" id="badgeTotalFound">8 Subjects Extracted</span>
+          </div>
+          <h3 class="mb-0">Curriculum Review & Faculty Assignment</h3>
+          <span class="panel-sub">Verify extracted parameters, adjust difficulty/periods, and map faculty before creating class.</span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <div id="semSelectorWrap" class="d-flex align-items-center gap-2">
+            <label class="form-label fw-bold mb-0 small text-muted">Semester:</label>
+            <select class="form-select form-select-sm" id="semSelect" onchange="renderSemesterSubjects(this.value)" style="min-width:140px;"></select>
+          </div>
+          <button class="btn btn-sm btn-outline-primary" onclick="addCustomSubjectRow()"><i class="fas fa-plus me-1"></i>Add Subject</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Class Configuration Header -->
+    <div class="bg-light p-3 rounded-3 mb-3 border">
+      <div class="row g-3 align-items-end">
+        <div class="col-md-4">
+          <label class="form-label fw-bold small">Target Class / Section Name *</label>
+          <input type="text" class="form-control form-control-sm" id="importClassName" placeholder="e.g. II CSE - Section A"/>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label fw-bold small">Department *</label>
+          <select class="form-select form-select-sm" id="importDept">
+            <option value="CSE">CSE (Computer Science)</option>
+            <option value="ECE">ECE (Electronics & Comm)</option>
+            <option value="EEE">EEE (Electrical & Electronics)</option>
+            <option value="MECH">MECH (Mechanical)</option>
+            <option value="CIVIL">CIVIL (Civil Engg)</option>
+            <option value="IT">IT (Information Tech)</option>
+            <option value="AIDS">AI & Data Science</option>
+            <option value="COMMON">COMMON / 1st Year</option>
+            <option value="OTHER">OTHER</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label fw-bold small">Semester *</label>
+          <input type="number" class="form-control form-control-sm" id="importSemNum" min="1" max="8" value="3"/>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label fw-bold small">Student Strength</label>
+          <input type="number" class="form-control form-control-sm" id="importStrength" min="10" max="250" value="60"/>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Stats Summary -->
+    <div class="curriculum-metrics mb-3">
+      <div class="metric-item">
+        <span class="m-val text-primary" id="mTotalSubs">0</span>
+        <span class="m-lbl">Selected Subjects</span>
+      </div>
+      <div class="metric-item">
+        <span class="m-val text-success" id="mTheoryPeriods">0</span>
+        <span class="m-lbl">Lecture Periods/Wk</span>
+      </div>
+      <div class="metric-item">
+        <span class="m-val text-warning" id="mLabPeriods">0</span>
+        <span class="m-lbl">Lab Periods/Wk</span>
+      </div>
+      <div class="metric-item">
+        <span class="m-val text-dark" id="mTotalPeriods">0</span>
+        <span class="m-lbl">Total Contact Periods</span>
+      </div>
+    </div>
+
+    <!-- Review Table -->
+    <div class="table-responsive">
+      <table class="table table-hover align-middle custom-review-table" id="reviewTable">
+        <thead class="table-dark">
+          <tr>
+            <th width="40"><input type="checkbox" id="checkAllSubs" checked onchange="toggleSelectAll(this)"/></th>
+            <th width="110">Code</th>
+            <th>Subject Name</th>
+            <th width="90">Abbr</th>
+            <th width="110">Periods/Wk</th>
+            <th width="140">Type & Lab Dur</th>
+            <th width="140">Difficulty (1-5)</th>
+            <th width="200">Primary Faculty</th>
+            <th width="50"></th>
+          </tr>
+        </thead>
+        <tbody id="reviewTableBody">
+          <!-- Populated by JS -->
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Confirmation & Import Footer -->
+    <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 pt-3 border-top gap-3">
+      <div class="text-muted small">
+        <i class="fas fa-shield-alt text-success me-1"></i> Subjects will be saved to your institution workspace and linked to the class.
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <button type="button" class="btn btn-outline-secondary" onclick="resetFileUpload()">Cancel</button>
+        <button type="button" class="btn btn-primary px-4 fw-bold" id="btnConfirmImport" onclick="submitImport(false)">
+          <i class="fas fa-save me-1"></i> Save Subjects & Class
+        </button>
+        <button type="button" class="btn btn-success px-4 fw-bold" id="btnImportAndGenerate" onclick="submitImport(true)">
+          <i class="fas fa-calendar-check me-1"></i> Save & Generate Timetable →
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.syllabus-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.setup-hero {
+  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%);
+  color: #fff;
+  padding: 2rem;
+  border-radius: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 10px 25px -5px rgba(49, 46, 129, 0.3);
+}
+.hero-badge {
+  display: inline-block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  font-weight: 700;
+  background: rgba(255,255,255,0.15);
+  padding: 4px 10px;
+  border-radius: 20px;
+  margin-bottom: 0.5rem;
+}
+.setup-hero h2 {
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+.setup-hero p {
+  color: rgba(255,255,255,0.85);
+  font-size: 0.95rem;
+  max-width: 750px;
+  margin-bottom: 0;
+}
+.mode-card {
+  background: #fff;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.mode-card:hover {
+  border-color: #6366f1;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(99,102,241,0.12);
+}
+.mode-card.active-mode {
+  border-color: #4f46e5;
+  background: #f8fafc;
+  box-shadow: 0 4px 14px rgba(79,70,229,0.15);
+}
+.mode-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+.mode-icon.blue { background: #e0e7ff; color: #4338ca; }
+.mode-icon.purple { background: #f3e8ff; color: #7e22ce; }
+.mode-title { font-weight: 700; color: #1e293b; margin-bottom: 2px; }
+.mode-desc { font-size: 0.82rem; color: #64748b; margin-bottom: 0; line-height: 1.3; }
+
+.pdf-dropzone {
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 3rem 2rem;
+  text-align: center;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.pdf-dropzone:hover, .pdf-dropzone.dragover {
+  border-color: #6366f1;
+  background: #eef2ff;
+}
+.file-info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: #f1f5f9;
+  border-radius: 8px;
+}
+.curriculum-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+}
+.metric-item {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  text-align: center;
+}
+.metric-item .m-val {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-family: 'Syne', sans-serif;
+  line-height: 1.1;
+}
+.metric-item .m-lbl {
+  font-size: 0.75rem;
+  color: #64748b;
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+.custom-review-table th {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 0.6rem 0.75rem;
+}
+.custom-review-table td {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.88rem;
+}
+.star-rating-select {
+  display: flex;
+  gap: 2px;
+  cursor: pointer;
+}
+.star-rating-select i {
+  color: #cbd5e1;
+  transition: color 0.15s;
+}
+.star-rating-select i.active {
+  color: #f59e0b;
+}
+.preset-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 1rem;
+  background: #fff;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+.preset-card:hover {
+  border-color: #6366f1;
+  box-shadow: 0 4px 12px rgba(99,102,241,0.12);
+  transform: translateY(-2px);
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Available faculty from database
+const STAFF_LIST = {{ staff_list | tojson }};
+let parsedData = null;
+let currentSemKey = "";
+let currentSubjects = [];
+
+function selectMode(mode) {
+  if(mode === 'pdf') {
+    document.getElementById('cardPdfMode').classList.add('active-mode');
+    document.getElementById('cardPresetMode').classList.remove('active-mode');
+    document.getElementById('cardPdfMode').querySelector('.mode-radio').innerHTML = '<i class="fas fa-check-circle text-primary"></i>';
+    document.getElementById('cardPresetMode').querySelector('.mode-radio').innerHTML = '<i class="far fa-circle text-muted"></i>';
+    document.getElementById('sectionPdfUpload').classList.remove('d-none');
+    document.getElementById('sectionPresetPicker').classList.add('d-none');
+  } else {
+    document.getElementById('cardPresetMode').classList.add('active-mode');
+    document.getElementById('cardPdfMode').classList.remove('active-mode');
+    document.getElementById('cardPresetMode').querySelector('.mode-radio').innerHTML = '<i class="fas fa-check-circle text-primary"></i>';
+    document.getElementById('cardPdfMode').querySelector('.mode-radio').innerHTML = '<i class="far fa-circle text-muted"></i>';
+    document.getElementById('sectionPresetPicker').classList.remove('d-none');
+    document.getElementById('sectionPdfUpload').classList.add('d-none');
+    loadPresets();
+  }
+}
+
+// Drag & Drop Setup
+const dropzone = document.getElementById('pdfDropzone');
+if(dropzone) {
+  ['dragenter', 'dragover'].forEach(name => {
+    dropzone.addEventListener(name, (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+  });
+  ['dragleave', 'drop'].forEach(name => {
+    dropzone.addEventListener(name, (e) => { e.preventDefault(); dropzone.classList.remove('dragover'); });
+  });
+  dropzone.addEventListener('drop', (e) => {
+    if(e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      uploadPdfFile(e.dataTransfer.files[0]);
+    }
+  });
+}
+
+function handleFileSelected(e) {
+  if(e.target.files && e.target.files[0]) {
+    uploadPdfFile(e.target.files[0]);
+  }
+}
+
+async function uploadPdfFile(file) {
+  if(!file.name.toLowerCase().endsWith('.pdf')) {
+    alert("Please upload a valid .pdf file.");
+    return;
+  }
+
+  document.getElementById('fileNameDisplay').innerText = file.name;
+  document.getElementById('fileSizeDisplay').innerText = `${Math.round(file.size / 1024)} KB`;
+  document.getElementById('fileInfoRow').classList.remove('d-none');
+
+  // Show loading
+  dropzone.querySelector('.dz-content').classList.add('d-none');
+  document.getElementById('dzLoading').classList.remove('d-none');
+
+  const formData = new FormData();
+  formData.append('syllabus_pdf', file);
+
+  try {
+    const res = await fetch('/api/syllabus/parse', {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+    if(!data.success) {
+      alert("Error parsing PDF: " + (data.error || "Could not read syllabus table."));
+      resetFileUpload();
+      return;
+    }
+
+    parsedData = data;
+    displayParsedResults(data);
+  } catch(err) {
+    alert("Server error while uploading PDF: " + err.message);
+    resetFileUpload();
+  } finally {
+    dropzone.querySelector('.dz-content').classList.remove('d-none');
+    document.getElementById('dzLoading').classList.add('d-none');
+  }
+}
+
+function resetFileUpload() {
+  document.getElementById('pdfInput').value = '';
+  document.getElementById('fileInfoRow').classList.add('d-none');
+  document.getElementById('sectionReview').classList.add('d-none');
+  parsedData = null;
+  currentSubjects = [];
+}
+
+async function loadPresets() {
+  const row = document.getElementById('presetsListRow');
+  row.innerHTML = `<div class="col-12 text-center py-4 text-muted"><div class="spinner-border spinner-border-sm text-primary me-2"></div>Loading presets...</div>`;
+  try {
+    const res = await fetch('/api/syllabus/presets');
+    const presets = await res.json();
+    row.innerHTML = '';
+    for(const [title, p] of Object.entries(presets)) {
+      const col = document.createElement('div');
+      col.className = 'col-md-6';
+      col.innerHTML = `
+        <div class="preset-card" onclick='applyPreset(${JSON.stringify(p).replace(/'/g, "&apos;")})'>
+          <div class="d-flex justify-content-between align-items-start mb-2">
+            <span class="badge bg-primary font-monospace">${p.department}</span>
+            <span class="badge bg-light text-dark border">${p.semester}</span>
+          </div>
+          <h5 class="fw-bold mb-1">${title}</h5>
+          <p class="text-muted small mb-2">${p.subjects.length} Subjects (Theory + Lab) • ${p.regulation}</p>
+          <div class="d-flex flex-wrap gap-1">
+            ${p.subjects.slice(0, 4).map(s => `<span class="badge bg-secondary-subtle text-secondary" style="font-size:10px;">${s.subject_code}</span>`).join('')}
+            ${p.subjects.length > 4 ? `<span class="badge bg-secondary-subtle text-secondary" style="font-size:10px;">+${p.subjects.length - 4} more</span>` : ''}
+          </div>
+        </div>
+      `;
+      row.appendChild(col);
+    }
+  } catch(e) {
+    row.innerHTML = `<div class="col-12 text-danger text-center">Failed to load presets: ${e.message}</div>`;
+  }
+}
+
+function applyPreset(preset) {
+  parsedData = {
+    regulation: preset.regulation,
+    department: preset.department,
+    semesters: {
+      [preset.semester]: preset.subjects
+    }
+  };
+  displayParsedResults(parsedData, preset.class_name);
+  window.scrollTo({ top: document.getElementById('sectionReview').offsetTop - 60, behavior: 'smooth' });
+}
+
+function displayParsedResults(data, defaultClassName = null) {
+  document.getElementById('badgeRegulation').innerText = data.regulation || "Regulation";
+  document.getElementById('badgeDept').innerText = data.department || "CSE";
+  document.getElementById('importDept').value = data.department || "CSE";
+
+  const semSelect = document.getElementById('semSelect');
+  semSelect.innerHTML = '';
+  const semKeys = Object.keys(data.semesters || {});
+
+  if(semKeys.length === 0) {
+    alert("No semester subjects could be parsed from the document.");
+    return;
+  }
+
+  semKeys.forEach(k => {
+    const opt = document.createElement('option');
+    opt.value = k;
+    opt.innerText = `${k} (${data.semesters[k].length} subjects)`;
+    semSelect.appendChild(opt);
+  });
+
+  currentSemKey = semKeys[0];
+  renderSemesterSubjects(currentSemKey, defaultClassName);
+  document.getElementById('sectionReview').classList.remove('d-none');
+}
+
+function renderSemesterSubjects(semKey, defaultClassName = null) {
+  currentSemKey = semKey;
+  const rawSubs = (parsedData && parsedData.semesters && parsedData.semesters[semKey]) ? parsedData.semesters[semKey] : [];
+  
+  // Clone subjects
+  currentSubjects = rawSubs.map((s, idx) => ({
+    id: idx + 1,
+    selected: true,
+    subject_code: s.subject_code || '',
+    subject_name: s.subject_name || '',
+    abbreviation: s.abbreviation || '',
+    department: s.department || document.getElementById('importDept').value,
+    periods_per_week: s.periods_per_week || (s.is_lab ? 3 : 3),
+    is_lab: !!s.is_lab,
+    lab_duration: s.lab_duration || (s.is_lab ? 2 : 0),
+    difficulty_level: s.difficulty_level || 3,
+    credits: s.credits || 3,
+    assigned_staff_id: null,
+    lab_staff2_id: null
+  }));
+
+  // Extract semester number (e.g. "Semester 3" -> 3)
+  const numMatch = semKey.match(/\d+/);
+  const semNum = numMatch ? parseInt(numMatch[0]) : 3;
+  document.getElementById('importSemNum').value = semNum;
+
+  const dept = document.getElementById('importDept').value;
+  document.getElementById('importClassName').value = defaultClassName || `${dept} - Sem ${semNum} (Sec A)`;
+
+  renderTableRows();
+}
+
+function renderTableRows() {
+  const tbody = document.getElementById('reviewTableBody');
+  tbody.innerHTML = '';
+
+  currentSubjects.forEach((sub, idx) => {
+    const tr = document.createElement('tr');
+    tr.id = `subRow_${idx}`;
+    if(!sub.selected) tr.classList.add('opacity-50', 'bg-light');
+
+    // Faculty select options
+    let staffOptions = `<option value="">-- Assign Faculty --</option>`;
+    STAFF_LIST.forEach(st => {
+      const isSelected = sub.assigned_staff_id == st.id ? 'selected' : '';
+      staffOptions += `<option value="${st.id}" ${isSelected}>${st.name} (${st.department})</option>`;
+    });
+
+    tr.innerHTML = `
+      <td>
+        <input type="checkbox" ${sub.selected ? 'checked' : ''} onchange="toggleSubjectSelect(${idx}, this.checked)"/>
+      </td>
+      <td>
+        <input type="text" class="form-control form-control-sm font-monospace fw-bold" value="${sub.subject_code}" onchange="updateSubProp(${idx}, 'subject_code', this.value)"/>
+      </td>
+      <td>
+        <input type="text" class="form-control form-control-sm fw-semibold" value="${sub.subject_name}" onchange="updateSubProp(${idx}, 'subject_name', this.value)"/>
+      </td>
+      <td>
+        <input type="text" class="form-control form-control-sm font-monospace" value="${sub.abbreviation}" onchange="updateSubProp(${idx}, 'abbreviation', this.value)"/>
+      </td>
+      <td>
+        <div class="input-group input-group-sm">
+          <input type="number" class="form-control" min="1" max="15" value="${sub.periods_per_week}" onchange="updateSubProp(${idx}, 'periods_per_week', parseInt(this.value)||3)"/>
+          <span class="input-group-text">/wk</span>
+        </div>
+      </td>
+      <td>
+        <div class="d-flex flex-column gap-1">
+          <select class="form-select form-select-sm" onchange="updateSubType(${idx}, this.value)">
+            <option value="0" ${!sub.is_lab ? 'selected' : ''}>📖 Lecture</option>
+            <option value="1" ${sub.is_lab ? 'selected' : ''}>🧪 Lab / Practical</option>
+          </select>
+          ${sub.is_lab ? `
+            <select class="form-select form-select-sm" onchange="updateSubProp(${idx}, 'lab_duration', parseInt(this.value))">
+              <option value="2" ${sub.lab_duration === 2 ? 'selected' : ''}>2 consec. periods</option>
+              <option value="3" ${sub.lab_duration === 3 ? 'selected' : ''}>3 consec. periods</option>
+              <option value="4" ${sub.lab_duration === 4 ? 'selected' : ''}>4 consec. periods</option>
+            </select>
+          ` : ''}
+        </div>
+      </td>
+      <td>
+        <div class="star-rating-select" onclick="cycleDifficulty(${idx})">
+          ${[1,2,3,4,5].map(i => `<i class="fas fa-star ${i <= sub.difficulty_level ? 'active' : ''}"></i>`).join('')}
+          <span class="ms-1 small text-muted font-monospace">${sub.difficulty_level}/5</span>
+        </div>
+      </td>
+      <td>
+        <select class="form-select form-select-sm" onchange="updateSubProp(${idx}, 'assigned_staff_id', this.value ? parseInt(this.value) : null)">
+          ${staffOptions}
+        </select>
+      </td>
+      <td>
+        <button class="btn btn-sm btn-link text-danger p-0" onclick="removeSubjectRow(${idx})" title="Remove Subject"><i class="fas fa-trash"></i></button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  updateMetrics();
+}
+
+function updateSubProp(idx, prop, val) {
+  if(currentSubjects[idx]) {
+    currentSubjects[idx][prop] = val;
+    updateMetrics();
+  }
+}
+
+function updateSubType(idx, val) {
+  const isLab = val === "1";
+  currentSubjects[idx].is_lab = isLab;
+  if(isLab && !currentSubjects[idx].lab_duration) {
+    currentSubjects[idx].lab_duration = 2;
+  }
+  renderTableRows();
+}
+
+function cycleDifficulty(idx) {
+  const current = currentSubjects[idx].difficulty_level || 3;
+  currentSubjects[idx].difficulty_level = current >= 5 ? 1 : current + 1;
+  renderTableRows();
+}
+
+function toggleSubjectSelect(idx, isChecked) {
+  currentSubjects[idx].selected = isChecked;
+  const row = document.getElementById(`subRow_${idx}`);
+  if(row) {
+    if(isChecked) row.classList.remove('opacity-50', 'bg-light');
+    else row.classList.add('opacity-50', 'bg-light');
+  }
+  updateMetrics();
+}
+
+function toggleSelectAll(cb) {
+  const isChecked = cb.checked;
+  currentSubjects.forEach(s => s.selected = isChecked);
+  renderTableRows();
+}
+
+function removeSubjectRow(idx) {
+  currentSubjects.splice(idx, 1);
+  renderTableRows();
+}
+
+function addCustomSubjectRow() {
+  currentSubjects.push({
+    id: currentSubjects.length + 1,
+    selected: true,
+    subject_code: 'SUB' + (currentSubjects.length + 1),
+    subject_name: 'New Custom Course',
+    abbreviation: 'NEW',
+    department: document.getElementById('importDept').value,
+    periods_per_week: 3,
+    is_lab: false,
+    lab_duration: 0,
+    difficulty_level: 3,
+    credits: 3,
+    assigned_staff_id: null,
+    lab_staff2_id: null
+  });
+  renderTableRows();
+}
+
+function updateMetrics() {
+  const activeSubs = currentSubjects.filter(s => s.selected);
+  let totalTheory = 0;
+  let totalLab = 0;
+
+  activeSubs.forEach(s => {
+    if(s.is_lab) totalLab += s.periods_per_week;
+    else totalTheory += s.periods_per_week;
+  });
+
+  document.getElementById('mTotalSubs').innerText = activeSubs.length;
+  document.getElementById('mTheoryPeriods').innerText = totalTheory;
+  document.getElementById('mLabPeriods').innerText = totalLab;
+  document.getElementById('mTotalPeriods').innerText = totalTheory + totalLab;
+  document.getElementById('badgeTotalFound').innerText = `${activeSubs.length} Subjects Selected`;
+}
+
+async function submitImport(generateImmediately = false) {
+  const className = document.getElementById('importClassName').value.trim();
+  const department = document.getElementById('importDept').value;
+  const semester = parseInt(document.getElementById('importSemNum').value) || 3;
+  const strength = parseInt(document.getElementById('importStrength').value) || 60;
+
+  if(!className) {
+    alert("Please enter a Target Class / Section Name.");
+    return;
+  }
+
+  const selectedSubs = currentSubjects.filter(s => s.selected);
+  if(selectedSubs.length === 0) {
+    alert("Please select at least one subject to import.");
+    return;
+  }
+
+  const btn = generateImmediately ? document.getElementById('btnImportAndGenerate') : document.getElementById('btnConfirmImport');
+  const origHtml = btn.innerHTML;
+  btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Saving...`;
+  btn.disabled = true;
+
+  try {
+    const payload = {
+      class_name: className,
+      department: department,
+      semester: semester,
+      strength: strength,
+      subjects: selectedSubs
+    };
+
+    const res = await fetch('/api/syllabus/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if(data.success) {
+      if(generateImmediately) {
+        window.location.href = `/timetable?class_id=${data.class_id}&auto_gen=1`;
+      } else {
+        alert(`Successfully imported ${data.created_subjects_count} subjects and created class '${className}'!`);
+        window.location.href = '/classes';
+      }
+    } else {
+      alert("Import failed: " + (data.error || "Unknown error"));
+      btn.innerHTML = origHtml;
+      btn.disabled = false;
+    }
+  } catch(e) {
+    alert("Server error: " + e.message);
+    btn.innerHTML = origHtml;
+    btn.disabled = false;
+  }
+}
+</script>
+{% endblock %}

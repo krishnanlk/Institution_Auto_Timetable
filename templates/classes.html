@@ -1,7 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Classes – SchedHub{% endblock %}
 {% block page_title %}Class Management{% endblock %}
-{% block topbar_actions %}<button class="btn-primary-sm" onclick="openAddModal()"><i class="fas fa-plus me-1"></i>Add Class</button>{% endblock %}
+{% block topbar_actions %}
+<a href="/syllabus-import" class="btn btn-sm btn-outline-primary me-2"><i class="fas fa-file-import me-1"></i>Import from Syllabus PDF</a>
+<button class="btn-primary-sm" onclick="openAddModal()"><i class="fas fa-plus me-1"></i>Add Class</button>
+{% endblock %}
+
 {% block content %}
 <div class="search-bar-row"><div class="search-wrap"><i class="fas fa-search"></i><input type="text" id="clsSearch" class="search-input" placeholder="Search classes…" oninput="filterClasses()"/></div><span class="result-count" id="clsCount">{{ classes|length }} classes</span></div>
 <div class="cards-grid">
