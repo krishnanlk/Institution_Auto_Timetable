@@ -52,9 +52,24 @@ inject_user(app)
 def inst_id():
     return session.get("institution_id")
 
-@app.errorhandler(404)
-def page_not_found(e):
-    return f"DEBUG 404: request.path='{request.path}' PATH_INFO='{request.environ.get('PATH_INFO')}' QUERY_STRING='{request.environ.get('QUERY_STRING')}'", 404
+# ── Vercel Serverless Path Dispatcher Middleware ─────────────────────────────
+class VercelPathFixMiddleware:
+    """Ensures paths passed via vercel.json (?__path=...) map to correct Flask routes."""
+    def __init__(self, wsgi_app):
+        self.wsgi_app = wsgi_app
+
+    def __call__(self, environ, start_response):
+        query_string = environ.get('QUERY_STRING', '')
+        if '__path=' in query_string:
+            from urllib.parse import parse_qs, urlencode
+            qs = parse_qs(query_string, keep_blank_values=True)
+            if '__path' in qs:
+                path_val = qs.pop('__path')[0]
+                environ['PATH_INFO'] = '/' + path_val.lstrip('/')
+                environ['QUERY_STRING'] = urlencode(qs, doseq=True)
+        return self.wsgi_app(environ, start_response)
+
+app.wsgi_app = VercelPathFixMiddleware(app.wsgi_app)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ROOT
