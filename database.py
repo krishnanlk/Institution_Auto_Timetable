@@ -35,10 +35,28 @@ class DBAdapter:
     # ── Internal helpers ──────────────────────────────────────────────────────
 
     def _adapt(self, sql: str) -> str:
-        """Convert ? placeholders to %s for PostgreSQL."""
+        """Convert SQLite-specific SQL syntax to PostgreSQL equivalents."""
         if self.backend == "postgres":
-            return sql.replace("?", "%s")
+            # ? placeholders → %s
+            sql = sql.replace("?", "%s")
+            # INSERT OR IGNORE INTO → INSERT INTO ... ON CONFLICT DO NOTHING
+            new_sql, n_ignore = re.subn(
+                r"\bINSERT\s+OR\s+IGNORE\s+INTO\b",
+                "INSERT INTO",
+                sql, flags=re.IGNORECASE
+            )
+            if n_ignore > 0:
+                sql = new_sql.rstrip().rstrip(";") + " ON CONFLICT DO NOTHING"
+            else:
+                sql = new_sql
+            # INSERT OR REPLACE INTO → INSERT INTO ... ON CONFLICT DO UPDATE (best-effort)
+            sql = re.sub(
+                r"\bINSERT\s+OR\s+REPLACE\s+INTO\b",
+                "INSERT INTO",
+                sql, flags=re.IGNORECASE
+            )
         return sql
+
 
     def _cursor(self):
         if self.backend == "postgres":
