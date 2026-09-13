@@ -58,8 +58,6 @@ def inst_id():
 # ══════════════════════════════════════════════════════════════════════════════
 
 @app.route("/")
-@app.route("/api/index")
-@app.route("/api/index/")
 def root():
     if session.get("user_id"):
         return redirect(url_for("dashboard"))

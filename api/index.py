@@ -1,5 +1,6 @@
 import os
 import sys
+from urllib.parse import parse_qs, urlencode
 
 # Ensure root directory is in python module search path
 root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -9,35 +10,37 @@ if root_dir not in sys.path:
 from app import app as flask_app
 
 class VercelWSGIWrapper:
-    """WSGI Middleware that fixes Vercel path routing and environment."""
+    """WSGI Middleware that cleanly maps Vercel serverless paths and query params."""
     def __init__(self, app):
         self.app = app
 
     def __call__(self, environ, start_response):
-        import json
-        headers = {k: str(v) for k, v in environ.items() if isinstance(v, (str, int, float, bool))}
-        start_response('200 OK', [('Content-Type', 'application/json')])
-        return [json.dumps(headers, indent=2).encode('utf-8')]
-
-        # If Vercel passed original matched URL in headers (e.g. /login, /timetable)
-        matched_path = (
-            environ.get('HTTP_X_MATCHED_PATH') or
-            environ.get('HTTP_X_FORWARDED_URI') or
-            environ.get('RAW_URI')
-        )
-        if matched_path:
-            clean = matched_path.split('?')[0]
-            if clean and not clean.startswith('/api/index'):
-                environ['PATH_INFO'] = clean
-            if '?' in matched_path and not environ.get('QUERY_STRING'):
-                environ['QUERY_STRING'] = matched_path.split('?', 1)[1]
+        query_string = environ.get('QUERY_STRING', '')
+        qs = parse_qs(query_string, keep_blank_values=True)
         
-        # Strip /api/index prefix if Vercel routed to the function directly
-        path_info = environ.get('PATH_INFO', '')
-        if path_info in ('/api/index', '/api/index/'):
-            environ['PATH_INFO'] = '/'
-        elif path_info.startswith('/api/index/'):
-            environ['PATH_INFO'] = path_info[len('/api/index'):]
+        # Check if __path parameter was passed by vercel.json rewrite
+        if '__path' in qs:
+            path_val = qs.pop('__path')[0]
+            environ['PATH_INFO'] = '/' + path_val.lstrip('/')
+            # Reconstruct clean QUERY_STRING without the internal __path parameter
+            environ['QUERY_STRING'] = urlencode(qs, doseq=True)
+        else:
+            # Fallback for direct invocations or headers
+            matched_path = (
+                environ.get('HTTP_X_MATCHED_PATH') or
+                environ.get('HTTP_X_FORWARDED_URI') or
+                environ.get('RAW_URI')
+            )
+            if matched_path:
+                clean = matched_path.split('?')[0]
+                if clean and not clean.startswith('/api/index'):
+                    environ['PATH_INFO'] = clean
+            else:
+                path_info = environ.get('PATH_INFO', '')
+                if path_info in ('/api/index', '/api/index/'):
+                    environ['PATH_INFO'] = '/'
+                elif path_info.startswith('/api/index/'):
+                    environ['PATH_INFO'] = path_info[len('/api/index'):]
 
         return self.app(environ, start_response)
 
