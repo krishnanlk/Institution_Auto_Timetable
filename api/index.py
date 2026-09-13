@@ -14,6 +14,13 @@ class VercelWSGIWrapper:
         self.app = app
 
     def __call__(self, environ, start_response):
+        path_info_raw = environ.get('PATH_INFO', '')
+        if 'debug-env' in path_info_raw or 'debug-env' in str(environ.get('HTTP_X_MATCHED_PATH', '')) or 'debug-env' in str(environ.get('RAW_URI', '')):
+            import json
+            headers = {k: str(v) for k, v in environ.items() if isinstance(v, (str, int, float, bool))}
+            start_response('200 OK', [('Content-Type', 'application/json')])
+            return [json.dumps(headers, indent=2).encode('utf-8')]
+
         # If Vercel passed original matched URL in headers (e.g. /login, /timetable)
         matched_path = (
             environ.get('HTTP_X_MATCHED_PATH') or
