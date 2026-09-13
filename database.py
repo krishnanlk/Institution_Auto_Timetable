@@ -126,7 +126,12 @@ class DBAdapter:
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _make_raw_conn():
-    """Return a raw DB connection based on the configured backend, with SQLite fallback if PG is unreachable."""
+    """Return a raw DB connection based on the configured backend, with SQLite fallback if PG is unreachable.
+    
+    Note: Supabase Transaction Pooler uses IPv6 by default. For Vercel (IPv4 only),
+    configure DATABASE_URL to use the Direct Connection (port 5432) or enable
+    the Supabase IPv4 add-on for Transaction Pooler.
+    """
     if DB_BACKEND == "sqlite":
         conn = sqlite3.connect(SQLITE_PATH, timeout=30, check_same_thread=False)
         conn.row_factory = sqlite3.Row
@@ -137,17 +142,27 @@ def _make_raw_conn():
     else:
         import psycopg2
         try:
-            conn = psycopg2.connect(DATABASE_URL, connect_timeout=5)
+            # Increase timeout to 10s for Supabase cold starts on Vercel
+            conn = psycopg2.connect(DATABASE_URL, connect_timeout=10,
+                                    sslmode="require")
             conn.autocommit = False
             return conn, "postgres"
         except Exception as e:
-            print(f"[WARN] PostgreSQL connection failed ({e}). Falling back to SQLite: {SQLITE_PATH}")
-            conn = sqlite3.connect(SQLITE_PATH, timeout=30, check_same_thread=False)
-            conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA foreign_keys = ON")
-            conn.execute("PRAGMA journal_mode = WAL")
-            conn.execute("PRAGMA busy_timeout = 5000")
-            return conn, "sqlite"
+            # Try without forcing SSL (in case the URL already includes sslmode)
+            try:
+                conn = psycopg2.connect(DATABASE_URL, connect_timeout=10)
+                conn.autocommit = False
+                return conn, "postgres"
+            except Exception as e2:
+                print(f"[WARN] PostgreSQL connection failed ({e2}). Falling back to SQLite: {SQLITE_PATH}")
+                conn = sqlite3.connect(SQLITE_PATH, timeout=30, check_same_thread=False)
+                conn.row_factory = sqlite3.Row
+                conn.execute("PRAGMA foreign_keys = ON")
+                conn.execute("PRAGMA journal_mode = WAL")
+                conn.execute("PRAGMA busy_timeout = 5000")
+                return conn, "sqlite"
+
+
 
 
 @contextmanager
@@ -554,7 +569,11 @@ def init_db():
 
 
 def seed_inbuilt_curricula_if_empty(conn):
-    """Seed official Anna University curricula across all 10 departments and 8 semesters into the database if not present."""
+    """Seed official Anna University curricula using bulk insert for Vercel compatibility.
+    
+    Uses executemany() to insert all 3000+ rows in a single DB call instead of row-by-row,
+    preventing Vercel's 10-second function timeout from killing the seeding process.
+    """
     try:
         # Check if table already populated
         row = conn.execute("SELECT COUNT(*) as c FROM inbuilt_curriculum").fetchone()
@@ -569,22 +588,15 @@ def seed_inbuilt_curricula_if_empty(conn):
             ("R2025", curriculum_data.R2025_DATA)
         ]
 
-        inserted = 0
+        # Build all rows in memory first (fast Python, no DB round-trips)
+        rows = []
         for reg_name, data_source in reg_map:
             for (deg, dept, sem), subs in data_source.items():
                 m = re.search(r'\d+', sem)
                 sem_num = int(m.group(0)) if m else 1
                 for s in subs:
-                    conn.execute("""
-                        INSERT INTO inbuilt_curriculum 
-                        (regulation, degree, department, semester, semester_num, subject_code, subject_name, abbreviation, periods_per_week, difficulty_level, is_lab, lab_duration, credits)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        reg_name,
-                        deg,
-                        dept,
-                        sem,
-                        sem_num,
+                    rows.append((
+                        reg_name, deg, dept, sem, sem_num,
                         s.get("subject_code", ""),
                         s.get("subject_name", ""),
                         s.get("abbreviation", ""),
@@ -594,12 +606,21 @@ def seed_inbuilt_curricula_if_empty(conn):
                         int(s.get("lab_duration", 0)),
                         float(s.get("credits", 3.0))
                     ))
-                    inserted += 1
-        if inserted > 0:
-            conn.commit()
-            print(f"[OK] Seeded {inserted} official inbuilt curriculum records into database.")
+
+        if rows:
+            # Single bulk executemany — orders of magnitude faster than row-by-row
+            conn.executemany(
+                """INSERT INTO inbuilt_curriculum 
+                   (regulation, degree, department, semester, semester_num, subject_code, subject_name,
+                    abbreviation, periods_per_week, difficulty_level, is_lab, lab_duration, credits)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                rows
+            )
+            print(f"[OK] Seeded {len(rows)} official inbuilt curriculum records into database.")
     except Exception as e:
         print(f"[WARN] Inbuilt curriculum seeding skipped: {e}")
+
+
 
 
 # ══════════════════════════════════════════════════════════════════════════════
