@@ -22,6 +22,13 @@ An enterprise-grade, multi-tenant institutional timetable scheduling and faculty
 - **Pre-Generation Feasibility Validator**: Scans staff-to-period ratios, weekly limits, and department loads before generation, highlighting issues with actionable recommendations.
 
 ### 3. 📄 Official 1-Page Printable Timetable Format
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/3e29c648-b0ea-41be-9a50-b98434b12266" alt="Official 1-Page Printable Timetable Preview" width="950" style="border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.15);"/>
+  <br>
+  <em>Figure: Autonomous 1-Page Rotated Timetable Layout with Merged 2-Period Lab Spans (⟵ LAB ⟶), Course/Faculty Legend, and Signatures.</em>
+</p>
+
 - **Rotated Grid Architecture**: Modern university layout with Days as rows (Monday–Friday/Saturday) and Periods/Breaks as columns.
 - **Consecutive Period Merging**: Same-subject and same-staff periods horizontally merged with outward directional arrows and combined time headers.
 - **Strict 1-Page Print Resize Engine**:
