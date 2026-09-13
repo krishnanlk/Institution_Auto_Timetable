@@ -49,79 +49,72 @@
 
   <!-- SECTION 1: INBUILT REGULATION NAVIGATOR (R2021, R2023, R2025) -->
   <div id="sectionPresetPicker" class="card-panel mb-4">
-    <div class="panel-head border-bottom pb-3 mb-3">
+    <div class="panel-head">
       <div>
         <h3><i class="fas fa-graduation-cap text-warning me-2"></i>Inbuilt Anna University Regulation Browser</h3>
         <span class="panel-sub">Select regulation, degree, department, and semester to instantly load official courses</span>
       </div>
     </div>
 
-    <!-- Regulation Pills -->
-    <div class="d-flex flex-wrap gap-2 mb-3">
-      <button class="btn btn-sm reg-tab active" id="btnReg2021" onclick="switchRegulationTab('R2021')">
-        <i class="fas fa-check me-1"></i> R2021 (CBCS Affiliated)
-      </button>
-      <button class="btn btn-sm reg-tab" id="btnReg2023" onclick="switchRegulationTab('R2023')">
-        R2023 (Autonomous / AICTE)
-      </button>
-      <button class="btn btn-sm reg-tab" id="btnReg2025" onclick="switchRegulationTab('R2025')">
-        R2025 (NextGen AI & Industry 5.0)
-      </button>
-    </div>
+    <div class="panel-body p-4">
+      <!-- Regulation Pills -->
+      <div class="d-flex flex-wrap gap-2 mb-3" id="regPillsContainer">
+        <button type="button" class="btn btn-sm reg-tab active" id="btnReg2021" onclick="switchRegulationTab('R2021')">
+          <i class="fas fa-check-circle me-1"></i> R2021 (CBCS Affiliated)
+        </button>
+        <button type="button" class="btn btn-sm reg-tab" id="btnReg2023" onclick="switchRegulationTab('R2023')">
+          R2023 (Autonomous / AICTE)
+        </button>
+        <button type="button" class="btn btn-sm reg-tab" id="btnReg2025" onclick="switchRegulationTab('R2025')">
+          R2025 (NextGen AI & Industry 5.0)
+        </button>
+      </div>
 
-    <!-- Filter Bar -->
-    <div class="syllabus-filter-bar p-3 rounded-3 mb-4">
-      <div class="row g-3 align-items-end">
-        <div class="col-md-2">
-          <label class="form-label fw-bold small text-muted">Degree</label>
-          <select class="form-select form-select-sm syllabus-select fw-bold" id="navDegree" onchange="onNavFilterChange('degree')">
-            <option value="B.E." selected>B.E.</option>
-            <option value="B.Tech.">B.Tech.</option>
-          </select>
-        </div>
-        <div class="col-md-4">
-          <label class="form-label fw-bold small text-muted">Department / Branch</label>
-          <select class="form-select form-select-sm syllabus-select fw-bold" id="navDept" onchange="onNavFilterChange('dept')">
-            <option value="CSE" selected>CSE — Computer Science & Engineering</option>
-            <option value="IT">IT — Information Technology</option>
-            <option value="AIDS">AI & DS — Artificial Intelligence & Data Science</option>
-            <option value="ECE">ECE — Electronics & Communication</option>
-            <option value="EEE">EEE — Electrical & Electronics</option>
-            <option value="MECH">MECH — Mechanical Engineering</option>
-            <option value="CIVIL">CIVIL — Civil Engineering</option>
-            <option value="BME">BME — Biomedical Engineering</option>
-            <option value="CSBS">CSBS — Computer Science & Business Systems</option>
-            <option value="CYBER">CYBER — Cyber Security</option>
-          </select>
-        </div>
-        <div class="col-md-3">
-          <label class="form-label fw-bold small text-muted">Semester</label>
-          <select class="form-select form-select-sm syllabus-select fw-bold" id="navSemester" onchange="onNavFilterChange('semester')">
-            <option value="Semester 1" selected>Semester 1 (1st Year Foundation)</option>
-            <option value="Semester 2">Semester 2 (1st Year Core)</option>
-            <option value="Semester 3">Semester 3 (2nd Year)</option>
-            <option value="Semester 4">Semester 4 (2nd Year)</option>
-            <option value="Semester 5">Semester 5 (3rd Year)</option>
-            <option value="Semester 6">Semester 6 (3rd Year)</option>
-            <option value="Semester 7">Semester 7 (Final Year)</option>
-            <option value="Semester 8">Semester 8 (Project / Internship)</option>
-          </select>
-        </div>
-        <div class="col-md-3">
-          <button class="btn btn-sm w-100 btn-load-curriculum fw-bold" id="btnLoadCurriculum" onclick="loadCurriculumFromNav()">
-            <i class="fas fa-bolt me-1"></i> Load Inbuilt Curriculum
-          </button>
+      <!-- Filter Bar -->
+      <div class="syllabus-filter-bar">
+        <div class="row g-3 align-items-end">
+          <div class="col-xl-2 col-lg-2 col-md-3">
+            <label class="form-label fw-bold small text-muted mb-1">Degree</label>
+            <select class="form-select syllabus-select" id="navDegree" onchange="onNavFilterChange('degree')">
+              <option value="B.E." selected>B.E.</option>
+              <option value="B.Tech.">B.Tech.</option>
+            </select>
+          </div>
+          <div class="col-xl-4 col-lg-4 col-md-5">
+            <label class="form-label fw-bold small text-muted mb-1">Department / Branch</label>
+            <select class="form-select syllabus-select" id="navDept" onchange="onNavFilterChange('dept')">
+              <option value="CSE" selected>CSE — Computer Science & Engineering</option>
+              <option value="IT">IT — Information Technology</option>
+              <option value="AIDS">AI & DS — Artificial Intelligence & Data Science</option>
+              <option value="ECE">ECE — Electronics & Communication</option>
+              <option value="EEE">EEE — Electrical & Electronics</option>
+              <option value="MECH">MECH — Mechanical Engineering</option>
+              <option value="CIVIL">CIVIL — Civil Engineering</option>
+              <option value="BME">BME — Biomedical Engineering</option>
+              <option value="CSBS">CSBS — Computer Science & Business Systems</option>
+              <option value="CYBER">CYBER — Cyber Security</option>
+            </select>
+          </div>
+          <div class="col-xl-3 col-lg-3 col-md-4">
+            <label class="form-label fw-bold small text-muted mb-1">Semester</label>
+            <select class="form-select syllabus-select" id="navSemester" onchange="onNavFilterChange('semester')">
+              <option value="Semester 1" selected>Semester 1 (1st Year Foundation)</option>
+              <option value="Semester 2">Semester 2 (1st Year Core)</option>
+              <option value="Semester 3">Semester 3 (2nd Year)</option>
+              <option value="Semester 4">Semester 4 (2nd Year)</option>
+              <option value="Semester 5">Semester 5 (3rd Year)</option>
+              <option value="Semester 6">Semester 6 (3rd Year)</option>
+              <option value="Semester 7">Semester 7 (Final Year)</option>
+              <option value="Semester 8">Semester 8 (Project / Internship)</option>
+            </select>
+          </div>
+          <div class="col-xl-3 col-lg-3 col-md-12">
+            <button class="btn btn-load-curriculum w-100 fw-bold" id="btnLoadCurriculum" onclick="loadCurriculumFromNav()">
+              <i class="fas fa-bolt me-1"></i> Load Curriculum
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-
-    <!-- Quick Presets Cards Grid -->
-    <div class="d-flex align-items-center justify-content-between mb-3">
-      <h5 class="fw-bold mb-0 text-muted small text-uppercase">Popular Regulation Presets</h5>
-      <input type="text" class="form-control form-control-sm" id="presetSearch" placeholder="Search branch / semester..." style="max-width:240px;" oninput="filterPresetCards(this.value)"/>
-    </div>
-    <div class="row g-3" id="presetsListRow">
-      <div class="col-12 text-center py-4 text-muted"><div class="spinner-border spinner-border-sm text-primary me-2"></div>Loading AU presets...</div>
     </div>
   </div>
 
@@ -161,7 +154,7 @@
 
   <!-- SECTION 3: EXTRACTED CURRICULUM REVIEW & FACULTY MAPPING (WITH SECONDARY STAFF FOR LABS) -->
   <div id="sectionReview" class="card-panel mb-4 d-none">
-    <div class="panel-head border-bottom pb-3 mb-3">
+    <div class="panel-head">
       <div class="d-flex flex-wrap align-items-center justify-content-between w-100 gap-2">
         <div>
           <div class="d-flex align-items-center gap-2 mb-1">
@@ -175,15 +168,16 @@
         <div class="d-flex align-items-center gap-2">
           <div id="semSelectorWrap" class="d-flex align-items-center gap-2">
             <label class="form-label fw-bold mb-0 small text-muted">Semester:</label>
-            <select class="form-select form-select-sm" id="semSelect" onchange="renderSemesterSubjects(this.value)" style="min-width:140px;"></select>
+            <select class="form-select form-select-sm syllabus-select" id="semSelect" onchange="renderSemesterSubjects(this.value)" style="min-width:140px;"></select>
           </div>
           <button class="btn btn-sm btn-outline-primary" onclick="addCustomSubjectRow()"><i class="fas fa-plus me-1"></i>Add Subject</button>
         </div>
       </div>
     </div>
 
-    <!-- Class Configuration Header -->
-    <div class="bg-light p-3 rounded-3 mb-3 border">
+    <div class="panel-body p-4">
+      <!-- Class Configuration Header -->
+      <div class="syllabus-filter-bar mb-3 p-3">
       <div class="row g-3 align-items-end">
         <div class="col-md-4">
           <label class="form-label fw-bold small">Target Class / Section Name *</label>
@@ -277,6 +271,7 @@
     </div>
   </div>
 </div>
+</div>
 
 <style>
 .syllabus-container {
@@ -354,34 +349,41 @@
 .reg-tab {
   font-weight: 600;
   border-radius: 20px;
-  padding: 6px 16px;
-  font-size: 13px;
-  border: 1.5px solid #cbd5e1;
-  background: #fff;
-  color: #475569;
+  padding: 8px 18px;
+  font-size: 13.5px;
+  border: 1.5px solid #cbd5e1 !important;
+  background: #ffffff !important;
+  color: #475569 !important;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 7px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
 }
 .reg-tab:hover {
-  border-color: #6366f1;
-  color: #4f46e5;
-  background: #eef2ff;
+  border-color: #818cf8 !important;
+  color: #4338ca !important;
+  background: #f5f3ff !important;
 }
-.reg-tab.active {
+.reg-tab.active,
+.reg-tab.active:hover,
+.reg-tab.active:focus {
   background: #4f46e5 !important;
-  color: #fff !important;
+  color: #ffffff !important;
   border-color: #4f46e5 !important;
-  box-shadow: 0 3px 12px rgba(79, 70, 229, 0.28);
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35) !important;
+}
+.reg-tab.active i {
+  color: #ffffff !important;
 }
 
 .syllabus-filter-bar {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  padding: 16px 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
 }
 .syllabus-select {
   border: 1.5px solid #cbd5e1 !important;
@@ -390,8 +392,10 @@
   color: #0f172a !important;
   background-color: #fff !important;
   font-size: 13px !important;
-  padding: 6px 10px !important;
+  padding: 7px 12px !important;
+  height: 38px !important;
   transition: all 0.2s ease;
+  width: 100%;
 }
 .syllabus-select:focus {
   border-color: #4f46e5 !important;
@@ -401,19 +405,27 @@
 .btn-load-curriculum {
   background: linear-gradient(135deg, #4f46e5, #6366f1) !important;
   border: none !important;
-  color: #fff !important;
-  box-shadow: 0 3px 10px rgba(79, 70, 229, 0.25);
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.25);
   transition: all 0.2s ease;
   font-weight: 700;
-  padding: 6px 14px;
+  padding: 8px 14px;
   border-radius: 8px;
   font-size: 13px;
+  white-space: nowrap;
+  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 38px;
+  width: 100%;
 }
 .btn-load-curriculum:hover {
   background: linear-gradient(135deg, #4338ca, #4f46e5) !important;
-  box-shadow: 0 5px 15px rgba(79, 70, 229, 0.35);
+  box-shadow: 0 6px 18px rgba(79, 70, 229, 0.38);
   transform: translateY(-1px);
-  color: #fff !important;
+  color: #ffffff !important;
 }
 
 .pdf-dropzone {
@@ -485,19 +497,6 @@
 .star-rating-select i.active {
   color: #f59e0b;
 }
-.preset-card {
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  padding: 1rem;
-  background: #fff;
-  transition: all 0.2s ease;
-  cursor: pointer;
-}
-.preset-card:hover {
-  border-color: #6366f1;
-  box-shadow: 0 4px 12px rgba(99,102,241,0.12);
-  transform: translateY(-2px);
-}
 </style>
 {% endblock %}
 
@@ -508,10 +507,15 @@ const STAFF_LIST = {{ staff_list | tojson }};
 let parsedData = null;
 let currentSemKey = "";
 let currentSubjects = [];
-let allPresetsCache = {};
 let selectedRegTab = 'R2021';
 
 let fetchAbortCtrl = null;
+
+const REGULATION_TITLES = {
+  'R2021': 'R2021 (CBCS Affiliated)',
+  'R2023': 'R2023 (Autonomous / AICTE)',
+  'R2025': 'R2025 (NextGen AI & Industry 5.0)'
+};
 
 // Reactive filter changes: Degree, Dept, or Semester
 async function onNavFilterChange(field) {
@@ -532,7 +536,6 @@ async function onNavFilterChange(field) {
     }
   }
 
-  filterPresetCards();
   await autoLoadFromNav(false);
 }
 
@@ -556,14 +559,18 @@ function selectMode(mode) {
 
 function switchRegulationTab(reg) {
   selectedRegTab = reg;
-  document.querySelectorAll('.reg-tab').forEach(b => {
-    b.classList.remove('active');
+  ['R2021', 'R2023', 'R2025'].forEach(r => {
+    const btn = document.getElementById(`btnReg${r}`);
+    if (btn) {
+      if (r === reg) {
+        btn.classList.add('active');
+        btn.innerHTML = `<i class="fas fa-check-circle me-1"></i> ${REGULATION_TITLES[r]}`;
+      } else {
+        btn.classList.remove('active');
+        btn.innerHTML = REGULATION_TITLES[r];
+      }
+    }
   });
-  const activeBtn = document.getElementById(`btnReg${reg}`);
-  if(activeBtn) {
-    activeBtn.classList.add('active');
-  }
-  filterPresetCards();
   autoLoadFromNav(false);
 }
 
@@ -675,63 +682,6 @@ function resetFileUpload() {
   document.getElementById('sectionReview').classList.add('d-none');
   parsedData = null;
   currentSubjects = [];
-}
-
-async function loadPresets() {
-  const row = document.getElementById('presetsListRow');
-  row.innerHTML = `<div class="col-12 text-center py-4 text-muted"><div class="spinner-border spinner-border-sm text-primary me-2"></div>Loading AU presets...</div>`;
-  try {
-    const res = await fetch('/api/syllabus/presets');
-    allPresetsCache = await res.json();
-    renderPresetCards(allPresetsCache);
-  } catch(e) {
-    row.innerHTML = `<div class="col-12 text-danger text-center">Failed to load presets: ${e.message}</div>`;
-  }
-}
-
-function filterPresetCards(query = null) {
-  const searchVal = (query !== null ? query : document.getElementById('presetSearch').value).toLowerCase().trim();
-  const filtered = {};
-
-  for(const [title, p] of Object.entries(allPresetsCache)) {
-    const titleLower = title.toLowerCase();
-    const regMatch = title.includes(selectedRegTab) || !selectedRegTab;
-    const searchMatch = !searchVal || titleLower.includes(searchVal) || p.department.toLowerCase().includes(searchVal);
-    if(regMatch && searchMatch) {
-      filtered[title] = p;
-    }
-  }
-  renderPresetCards(filtered);
-}
-
-function renderPresetCards(presets) {
-  const row = document.getElementById('presetsListRow');
-  row.innerHTML = '';
-  const entries = Object.entries(presets);
-  if(entries.length === 0) {
-    row.innerHTML = `<div class="col-12 text-center py-4 text-muted">No presets match current filter. Use the selector above to load any specific semester.</div>`;
-    return;
-  }
-
-  for(const [title, p] of entries) {
-    const col = document.createElement('div');
-    col.className = 'col-md-6 col-lg-4';
-    col.innerHTML = `
-      <div class="preset-card" onclick='applyPreset(${JSON.stringify(p).replace(/'/g, "&apos;")}, true, true)'>
-        <div class="d-flex justify-content-between align-items-start mb-2">
-          <span class="badge bg-primary font-monospace">${p.department}</span>
-          <span class="badge bg-light text-dark border">${p.semester}</span>
-        </div>
-        <h6 class="fw-bold mb-1">${title}</h6>
-        <p class="text-muted small mb-2">${p.subjects.length} Subjects (Theory + Lab) • ${p.regulation}</p>
-        <div class="d-flex flex-wrap gap-1">
-          ${p.subjects.slice(0, 3).map(s => `<span class="badge bg-secondary-subtle text-secondary" style="font-size:10px;">${s.subject_code}</span>`).join('')}
-          ${p.subjects.length > 3 ? `<span class="badge bg-secondary-subtle text-secondary" style="font-size:10px;">+${p.subjects.length - 3} more</span>` : ''}
-        </div>
-      </div>
-    `;
-    row.appendChild(col);
-  }
 }
 
 function applyPreset(preset, shouldScroll = false, syncControls = true) {
@@ -1049,8 +999,7 @@ async function submitImport(generateImmediately = false) {
   }
 }
 
-// Initial load: fetch presets and immediately render default Semester 1 curriculum
-loadPresets();
+// Initial load: immediately render default Semester 1 curriculum from reactive nav
 autoLoadFromNav(false);
 </script>
 {% endblock %}
