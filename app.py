@@ -83,8 +83,16 @@ def api_debug_db():
         with get_db() as conn:
             insts = [dict(r) for r in conn.execute("SELECT id, name, code FROM institution").fetchall()]
             users = [dict(r) for r in conn.execute("SELECT id, institution_id, username FROM users").fetchall()]
+            counts = {
+                "staff": conn.execute("SELECT count(*) as c FROM staff").fetchone()["c"],
+                "subject": conn.execute("SELECT count(*) as c FROM subject").fetchone()["c"],
+                "class_section": conn.execute("SELECT count(*) as c FROM class_section").fetchone()["c"],
+                "timetable": conn.execute("SELECT count(*) as c FROM timetable").fetchone()["c"],
+                "timetable_slot": conn.execute("SELECT count(*) as c FROM timetable_slot").fetchone()["c"],
+            }
             info["institutions"] = insts
             info["users"] = users
+            info["counts"] = counts
             info["status"] = "OK"
     except Exception as e:
         info["error"] = str(e)
