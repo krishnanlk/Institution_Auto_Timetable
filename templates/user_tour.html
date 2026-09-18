@@ -1,0 +1,650 @@
+<!-- ═════════════════════ INTERACTIVE ONBOARDING TOUR MODAL ═════════════════════ -->
+<style>
+  /* ── Interactive Tour Overlay: Non-blocking, No Blur, Full Page Visibility & Interaction ── */
+  .tour-backdrop-overlay {
+    position: fixed;
+    inset: 0;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    pointer-events: none !important; /* Zero click-blocking: user can see, scroll, and interact with the page */
+    z-index: 1050;
+    transition: opacity 0.3s ease;
+  }
+
+  /* Spotlight Highlight on target sidebar element */
+  .tour-spotlight-active {
+    position: relative !important;
+    z-index: 1060 !important;
+    box-shadow: 0 0 0 3px #6366f1, 0 0 20px rgba(99, 102, 241, 0.7) !important;
+    background: rgba(99, 102, 241, 0.22) !important;
+    border-radius: 9px !important;
+    color: #ffffff !important;
+    transform: translateX(4px);
+    transition: all 0.3s ease !important;
+    pointer-events: auto !important;
+  }
+
+  .tour-spotlight-active i {
+    color: #a5b4fc !important;
+    transform: scale(1.15);
+    transition: transform 0.2s ease;
+  }
+
+  /* Floating Tour Popover Card */
+  .tour-card-container {
+    position: fixed;
+    z-index: 1070;
+    width: min(440px, 92vw);
+    background: #0f172a;
+    border: 1.5px solid rgba(255, 255, 255, 0.18);
+    border-radius: 18px;
+    box-shadow: 0 20px 50px -5px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(99, 102, 241, 0.35);
+    color: #f8fafc;
+    overflow: hidden;
+    pointer-events: auto !important; /* Tour card buttons and controls remain fully interactive */
+    transition: top 0.3s cubic-bezier(0.16, 1, 0.3, 1), left 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s ease;
+    animation: tourCardPopIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes tourCardPopIn {
+    from { opacity: 0; transform: scale(0.92) translateY(10px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  /* Tour Arrow pointer */
+  .tour-pointer-arrow {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    background: #0f172a;
+    border-left: 1px solid rgba(255, 255, 255, 0.16);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+    transform: rotate(45deg);
+    left: -7px;
+    top: 36px;
+    z-index: 1071;
+  }
+
+  /* Tour Card Header */
+  .tour-card-header {
+    background: linear-gradient(135deg, #1e1b4b 0%, #312e81 60%, #1e293b 100%);
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .tour-pill-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 9px;
+    border-radius: 20px;
+    background: rgba(99, 102, 241, 0.25);
+    border: 1px solid rgba(129, 140, 248, 0.4);
+    color: #c7d2fe;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+
+  .tour-step-tag {
+    font-size: 11.5px;
+    color: #94a3b8;
+    font-weight: 600;
+  }
+
+  .tour-btn-close {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 18px;
+    cursor: pointer;
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: 6px;
+    transition: all 0.2s;
+  }
+  .tour-btn-close:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  /* Tour Card Body */
+  .tour-card-body {
+    padding: 18px 20px 14px;
+  }
+
+  .tour-icon-title-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  .tour-feature-avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #4f46e5, #3730a3);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    box-shadow: 0 4px 14px rgba(79, 70, 229, 0.4);
+    flex-shrink: 0;
+  }
+
+  .tour-feature-heading {
+    font-size: 16px;
+    font-weight: 800;
+    color: #ffffff;
+    margin: 0;
+    line-height: 1.25;
+  }
+
+  .tour-feature-category {
+    font-size: 11px;
+    color: #818cf8;
+    text-transform: uppercase;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+
+  .tour-feature-desc {
+    font-size: 12.5px;
+    color: #cbd5e1;
+    line-height: 1.55;
+    margin-bottom: 12px;
+  }
+
+  .tour-tip-card {
+    background: rgba(30, 41, 59, 0.7);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    border-left: 3px solid #f59e0b;
+    border-radius: 8px;
+    padding: 8px 12px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 11.5px;
+    color: #e2e8f0;
+    line-height: 1.4;
+  }
+  .tour-tip-card i {
+    color: #fbbf24;
+    font-size: 13px;
+    margin-top: 2px;
+    flex-shrink: 0;
+  }
+
+  /* Tour Card Footer */
+  .tour-card-footer {
+    padding: 12px 18px 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    background: rgba(15, 23, 42, 0.4);
+  }
+
+  .tour-skip-btn {
+    background: transparent;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 13px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .tour-skip-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.5);
+  }
+
+  /* Dots Navigation */
+  .tour-dots-indicator {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .tour-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: rgba(148, 163, 184, 0.3);
+    cursor: pointer;
+    transition: all 0.25s ease;
+  }
+
+  .tour-dot.active {
+    width: 18px;
+    border-radius: 4px;
+    background: #6366f1;
+    box-shadow: 0 0 8px rgba(99, 102, 241, 0.6);
+  }
+
+  /* Nav Buttons */
+  .tour-btn-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .tour-btn-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .tour-btn-prev {
+    background: rgba(51, 65, 85, 0.8);
+    color: #cbd5e1;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .tour-btn-prev:hover:not(:disabled) {
+    background: #475569;
+    color: #ffffff;
+  }
+  .tour-btn-prev:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .tour-btn-next {
+    background: linear-gradient(135deg, #6366f1, #4338ca);
+    color: #ffffff;
+    box-shadow: 0 2px 10px rgba(99, 102, 241, 0.4);
+  }
+  .tour-btn-next:hover {
+    background: linear-gradient(135deg, #4f46e5, #3730a3);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.5);
+  }
+
+  /* Responsive Positioning */
+  @media (max-width: 860px) {
+    .tour-card-container {
+      left: 50% !important;
+      top: auto !important;
+      bottom: 20px !important;
+      transform: translateX(-50%) !important;
+    }
+    .tour-pointer-arrow {
+      display: none;
+    }
+  }
+</style>
+
+<div id="schedhubTourOverlay" class="tour-backdrop-overlay" style="display:none;" onclick="handleBackdropClick(event)">
+  <!-- Floating Interactive Card -->
+  <div class="tour-card-container" id="tourCardContainer" onclick="event.stopPropagation()">
+    <div class="tour-pointer-arrow" id="tourPointerArrow"></div>
+
+    <!-- Header -->
+    <div class="tour-card-header">
+      <div class="d-flex align-items-center gap-2">
+        <span class="tour-pill-badge"><i class="fas fa-compass"></i> Campus Guide</span>
+        <span class="tour-step-tag" id="tourStepTag">Step 1 of 9</span>
+      </div>
+      <button class="tour-btn-close" onclick="dismissTour('skipped')" title="Skip tour for now">&times;</button>
+    </div>
+
+    <!-- Body -->
+    <div class="tour-card-body">
+      <div class="tour-icon-title-row">
+        <div class="tour-feature-avatar" id="tourFeatureAvatar">
+          <i class="fas fa-th-large" id="tourFeatureIcon"></i>
+        </div>
+        <div>
+          <div class="tour-feature-category" id="tourFeatureCategory">Main Navigation</div>
+          <h4 class="tour-feature-heading" id="tourFeatureHeading">Campus Dashboard</h4>
+        </div>
+      </div>
+      <p class="tour-feature-desc" id="tourFeatureDesc">
+        Your high-level command center. Monitor total active sections, registered faculty members, venue capacities, and verify that the campus schedule is completely free of clashes.
+      </p>
+      <div class="tour-tip-card">
+        <i class="fas fa-lightbulb"></i>
+        <div id="tourTipText">Use Quick Actions to generate full schedules or jump to curriculum management in one click.</div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="tour-card-footer">
+      <button class="tour-skip-btn" id="tourSkipBtn" onclick="dismissTour('skipped')">
+        Skip for now
+      </button>
+
+      <div class="tour-dots-indicator" id="tourDotsContainer">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <div class="tour-btn-group">
+        <button class="tour-btn-action tour-btn-prev" id="tourPrevBtn" onclick="navigateTour(-1)">
+          <i class="fas fa-arrow-left"></i> Back
+        </button>
+        <button class="tour-btn-action tour-btn-next" id="tourNextBtn" onclick="navigateTour(1)">
+          Next <i class="fas fa-arrow-right"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  window.schedhubTourActive = false;
+
+  const TOUR_STEPS = [
+    {
+      targetId: 'tour-nav-dashboard',
+      category: 'Main Overview',
+      title: '1. Campus Dashboard',
+      icon: 'fas fa-th-large',
+      iconGradient: 'linear-gradient(135deg, #4f46e5, #3730a3)',
+      desc: 'Your central command hub. View real-time campus statistics including total classes, faculty counts, room utilization, and zero-conflict schedule verification at a glance.',
+      tip: 'The live metric cards show instant status updates and provide single-click generation shortcuts.'
+    },
+    {
+      targetId: 'tour-nav-syllabus',
+      category: 'Curriculum & AI Import',
+      title: '2. Import Syllabus',
+      icon: 'fas fa-file-import',
+      iconGradient: 'linear-gradient(135deg, #0ea5e9, #0284c7)',
+      desc: 'AI-powered syllabus parser. Upload official university regulation PDFs (e.g. Anna University R2021, R2023, R2025) or select inbuilt templates to automatically create semester courses in seconds.',
+      tip: 'Supports continuous multi-period practicals and dual-faculty lab allocations automatically.'
+    },
+    {
+      targetId: 'tour-nav-staff',
+      category: 'Faculty Management',
+      title: '3. Faculty Directory & Workload',
+      icon: 'fas fa-users',
+      iconGradient: 'linear-gradient(135deg, #8b5cf6, #6d28d9)',
+      desc: 'Manage all professors, assistant professors, and lab instructors. Set maximum daily and weekly teaching periods to maintain fair workloads and prevent faculty scheduling fatigue.',
+      tip: 'The scheduler strictly prevents professors from being assigned to two simultaneous classes.'
+    },
+    {
+      targetId: 'tour-nav-subjects',
+      category: 'Academic Subjects',
+      title: '4. Subjects & Practical Labs',
+      icon: 'fas fa-book',
+      iconGradient: 'linear-gradient(135deg, #10b981, #047857)',
+      desc: 'Configure theory courses and continuous laboratory blocks (e.g. 2, 3, or 4 consecutive periods). Assign difficulty ratings to let the AI balance tough subjects evenly across days.',
+      tip: 'Labs are automatically mapped to specialized venues and paired faculty instructors.'
+    },
+    {
+      targetId: 'tour-nav-classes',
+      category: 'Academic Sections',
+      title: '5. Classes & Sections',
+      icon: 'fas fa-door-open',
+      iconGradient: 'linear-gradient(135deg, #f59e0b, #d97706)',
+      desc: 'Organize student groups (e.g. II CSE-A, III IT-B) with student strength, dedicated home classrooms, academic year, and assigned department curricula.',
+      tip: 'Click into any section to customize faculty allocations or inspect class timetables.'
+    },
+    {
+      targetId: 'tour-nav-rooms',
+      category: 'Campus Facilities',
+      title: '6. Rooms & Lab Venues',
+      icon: 'fas fa-building',
+      iconGradient: 'linear-gradient(135deg, #ec4899, #be185d)',
+      desc: 'Register classrooms, computer centers, and specialized mechanical/electronics laboratories with seating capacity to avoid facility double-booking.',
+      tip: 'The optimizer guarantees that practical labs take place exclusively in assigned lab venues.'
+    },
+    {
+      targetId: 'tour-nav-timetable',
+      category: 'Automated AI Engine',
+      title: '7. AI Timetable Generator',
+      icon: 'fas fa-calendar-alt',
+      iconGradient: 'linear-gradient(135deg, #6366f1, #312e81)',
+      desc: 'The core AI scheduler! Runs constraint-satisfaction algorithms to produce 100% collision-free timetables. View interactive matrices, drag-and-drop slots, and export official printable PDFs.',
+      tip: 'Switch seamlessly between Class View, Faculty View, and Master Institution View.'
+    },
+    {
+      targetId: 'tour-nav-analytics',
+      category: 'Performance Insights',
+      title: '8. Workload & Room Analytics',
+      icon: 'fas fa-chart-bar',
+      iconGradient: 'linear-gradient(135deg, #06b6d4, #0891b2)',
+      desc: 'Visual workload charts and room utilization reports. Identify under-allocated classrooms or faculty members reaching their maximum period limit.',
+      tip: 'Export reports or rebalance workload before the semester begins.'
+    },
+    {
+      targetId: 'tour-nav-settings',
+      category: 'System Configuration',
+      title: '9. Settings & Timings',
+      icon: 'fas fa-cog',
+      iconGradient: 'linear-gradient(135deg, #64748b, #334155)',
+      desc: 'Customize institutional parameters: working days (5 or 6 days), periods per day, custom period slot timings (break & lunch intervals), and manage admin/creator/viewer roles.',
+      tip: 'Upload your official college crest logo to personalize all exported printable schedules.'
+    }
+  ];
+
+  let currentTourStep = 0;
+
+  function initTourDots() {
+    const dotsContainer = document.getElementById('tourDotsContainer');
+    if (!dotsContainer) return;
+    dotsContainer.innerHTML = '';
+    TOUR_STEPS.forEach((_, index) => {
+      const dot = document.createElement('div');
+      dot.className = 'tour-dot' + (index === 0 ? ' active' : '');
+      dot.title = `Jump to Step ${index + 1}`;
+      dot.onclick = () => goToTourStep(index);
+      dotsContainer.appendChild(dot);
+    });
+  }
+
+  function renderTourStep(stepIndex) {
+    if (stepIndex < 0 || stepIndex >= TOUR_STEPS.length) return;
+    currentTourStep = stepIndex;
+    const step = TOUR_STEPS[stepIndex];
+
+    // Remove spotlight from all previously highlighted items
+    document.querySelectorAll('.tour-spotlight-active').forEach(el => {
+      el.classList.remove('tour-spotlight-active');
+    });
+
+    // Highlight active sidebar element
+    const targetEl = document.getElementById(step.targetId);
+    if (targetEl) {
+      targetEl.classList.add('tour-spotlight-active');
+      // Scroll target smoothly into sidebar view if needed
+      targetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    // Update Content
+    document.getElementById('tourStepTag').textContent = `Step ${stepIndex + 1} of ${TOUR_STEPS.length}`;
+    document.getElementById('tourFeatureCategory').textContent = step.category;
+    document.getElementById('tourFeatureHeading').textContent = step.title;
+    document.getElementById('tourFeatureDesc').textContent = step.desc;
+    document.getElementById('tourTipText').textContent = step.tip;
+
+    // Update Icon
+    const iconEl = document.getElementById('tourFeatureIcon');
+    iconEl.className = step.icon;
+    const avatarEl = document.getElementById('tourFeatureAvatar');
+    avatarEl.style.background = step.iconGradient;
+
+    // Update Dots
+    document.querySelectorAll('.tour-dot').forEach((dot, idx) => {
+      dot.classList.toggle('active', idx === stepIndex);
+    });
+
+    // Update Buttons
+    const prevBtn = document.getElementById('tourPrevBtn');
+    prevBtn.disabled = (stepIndex === 0);
+
+    const nextBtn = document.getElementById('tourNextBtn');
+    if (stepIndex === TOUR_STEPS.length - 1) {
+      nextBtn.innerHTML = 'Get Started <i class="fas fa-check-circle"></i>';
+      nextBtn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+    } else {
+      nextBtn.innerHTML = 'Next <i class="fas fa-arrow-right"></i>';
+      nextBtn.style.background = 'linear-gradient(135deg, #6366f1, #4338ca)';
+    }
+
+    // Position Card beside Target Element
+    positionTourCard(targetEl);
+  }
+
+  function positionTourCard(targetEl) {
+    const card = document.getElementById('tourCardContainer');
+    const arrow = document.getElementById('tourPointerArrow');
+    if (!card) return;
+
+    if (window.innerWidth <= 860 || !targetEl) {
+      // Mobile positioning handled by CSS
+      return;
+    }
+
+    const rect = targetEl.getBoundingClientRect();
+    const cardHeight = card.offsetHeight || 320;
+    const windowHeight = window.innerHeight;
+
+    // Position to the right of the sidebar item
+    const leftPos = rect.right + 18;
+    let topPos = rect.top - 20;
+
+    // Prevent overflowing off bottom of screen
+    if (topPos + cardHeight > windowHeight - 20) {
+      topPos = windowHeight - cardHeight - 20;
+    }
+    // Prevent overflowing off top
+    if (topPos < 15) {
+      topPos = 15;
+    }
+
+    card.style.left = `${leftPos}px`;
+    card.style.top = `${topPos}px`;
+
+    // Position arrow relative to the target item center
+    if (arrow) {
+      const arrowTop = Math.max(16, Math.min(rect.top - topPos + 10, cardHeight - 28));
+      arrow.style.top = `${arrowTop}px`;
+    }
+  }
+
+  function navigateTour(direction) {
+    const nextIndex = currentTourStep + direction;
+    if (nextIndex >= 0 && nextIndex < TOUR_STEPS.length) {
+      renderTourStep(nextIndex);
+    } else if (nextIndex >= TOUR_STEPS.length) {
+      dismissTour('completed');
+    }
+  }
+
+  function goToTourStep(index) {
+    renderTourStep(index);
+  }
+
+  function handleOutsideInteraction(e) {
+    if (!window.schedhubTourActive) return;
+    const card = document.getElementById('tourCardContainer');
+    // If the touch/click is outside the tour card, automatically dismiss the tour
+    if (card && !card.contains(e.target)) {
+      const guideBtn = e.target.closest && e.target.closest('button[onclick*="startInteractiveTour"]');
+      if (guideBtn) return;
+      dismissTour('outside_interaction');
+    }
+  }
+
+  function startInteractiveTour(forced = false) {
+    const overlay = document.getElementById('schedhubTourOverlay');
+    if (!overlay) return;
+
+    window.schedhubTourActive = true;
+    overlay.style.display = 'block';
+    overlay.style.opacity = '1';
+
+    initTourDots();
+    renderTourStep(0);
+
+    // Keyboard listener
+    window.addEventListener('keydown', handleTourKeydown);
+
+    // Background touch / click auto-dismiss listener
+    setTimeout(() => {
+      document.addEventListener('pointerdown', handleOutsideInteraction, true);
+      document.addEventListener('touchstart', handleOutsideInteraction, { passive: true, capture: true });
+    }, 100);
+  }
+
+  function dismissTour(reason = 'skipped') {
+    const overlay = document.getElementById('schedhubTourOverlay');
+    if (overlay) {
+      overlay.style.opacity = '0';
+      setTimeout(() => {
+        overlay.style.display = 'none';
+        document.querySelectorAll('.tour-spotlight-active').forEach(el => {
+          el.classList.remove('.tour-spotlight-active');
+          el.classList.remove('tour-spotlight-active');
+        });
+        window.schedhubTourActive = false;
+
+        // If logo modal was pending for newly registered institution, allow it now
+        if (typeof checkPendingLogoModal === 'function') {
+          checkPendingLogoModal();
+        }
+      }, 250);
+    }
+    window.removeEventListener('keydown', handleTourKeydown);
+    document.removeEventListener('pointerdown', handleOutsideInteraction, true);
+    document.removeEventListener('touchstart', handleOutsideInteraction, true);
+  }
+
+  function handleBackdropClick(e) {
+    // If clicked on backdrop outside card, allow skip
+    if (e.target.id === 'schedhubTourOverlay') {
+      dismissTour('skipped');
+    }
+  }
+
+  function handleTourKeydown(e) {
+    if (!window.schedhubTourActive) return;
+    if (e.key === 'Escape') {
+      dismissTour('skipped');
+    } else if (e.key === 'ArrowRight' || e.key === 'Enter') {
+      navigateTour(1);
+    } else if (e.key === 'ArrowLeft') {
+      navigateTour(-1);
+    }
+  }
+
+  // Automatic Trigger Check on Page Load
+  document.addEventListener('DOMContentLoaded', () => {
+    const triggerEl = document.getElementById('tourTriggerConfig');
+    const shouldShowTour = triggerEl && triggerEl.getAttribute('data-show-tour') === 'true';
+
+    if (shouldShowTour) {
+      // Delay slightly for smooth page entrance
+      setTimeout(() => {
+        startInteractiveTour(true);
+      }, 550);
+    }
+  });
+
+  // Re-adjust card position on resize
+  window.addEventListener('resize', () => {
+    if (window.schedhubTourActive) {
+      const step = TOUR_STEPS[currentTourStep];
+      if (step) {
+        positionTourCard(document.getElementById(step.targetId));
+      }
+    }
+  });
+</script>

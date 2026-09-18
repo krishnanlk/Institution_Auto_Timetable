@@ -205,21 +205,40 @@ def _sqlite_ddl_to_pg(sql: str) -> str:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Auth helpers
+# Auth helpers (OWASP Hardened: PBKDF2-SHA256, Constant-Time Comparison)
 # ══════════════════════════════════════════════════════════════════════════════
 
 def hash_password(pw: str) -> str:
-    salt = secrets.token_hex(16)
-    h = hashlib.sha256((salt + pw).encode()).hexdigest()
-    return f"{salt}:{h}"
+    """Hash password using Werkzeug's PBKDF2:SHA256 (OWASP recommended standard)."""
+    from werkzeug.security import generate_password_hash
+    return generate_password_hash(pw, method="pbkdf2:sha256")
 
 
 def check_password(stored: str, pw: str) -> bool:
+    """
+    Validates password against stored hash.
+    Supports Werkzeug hashes (scrypt, pbkdf2) and legacy salt:sha256.
+    Uses hmac.compare_digest to prevent timing side-channel attacks.
+    """
+    if not stored or not pw:
+        return False
     try:
-        salt, h = stored.split(":", 1)
-        return hashlib.sha256((salt + pw).encode()).hexdigest() == h
+        from werkzeug.security import check_password_hash
+        if stored.startswith(("pbkdf2:", "scrypt:")):
+            return check_password_hash(stored, pw)
+        if ":" in stored:
+            salt, h = stored.split(":", 1)
+            computed = hashlib.sha256((salt + pw).encode()).hexdigest()
+            import hmac
+            return hmac.compare_digest(computed, h)
+        return False
     except Exception:
         return False
+
+
+def is_legacy_hash(stored: str) -> bool:
+    """Identifies legacy salt:sha256 hashes to facilitate automatic silent upgrade."""
+    return bool(stored and not stored.startswith(("pbkdf2:", "scrypt:")))
 
 
 # ══════════════════════════════════════════════════════════════════════════════

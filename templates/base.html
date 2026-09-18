@@ -28,19 +28,19 @@
     </div>
     <div class="sidebar-nav">
       <span class="nav-label">MAIN</span>
-      <a href="/dashboard" class="nav-item {% if request.path in ('/','/dashboard') %}active{% endif %}"><i class="fas fa-th-large"></i><span>Dashboard</span></a>
+      <a href="/dashboard" id="tour-nav-dashboard" class="nav-item {% if request.path in ('/','/dashboard') %}active{% endif %}"><i class="fas fa-th-large"></i><span>Dashboard</span></a>
       <span class="nav-label">MANAGE</span>
-      <a href="/syllabus-import" class="nav-item {% if '/syllabus-import' in request.path %}active{% endif %}" style="background:rgba(99,102,241,0.08);"><i class="fas fa-file-import text-primary"></i><span class="fw-bold">Import Syllabus</span></a>
-      <a href="/staff"    class="nav-item {% if '/staff'    in request.path %}active{% endif %}"><i class="fas fa-users"></i><span>Staff</span></a>
-      <a href="/subjects" class="nav-item {% if '/subjects' in request.path %}active{% endif %}"><i class="fas fa-book"></i><span>Subjects</span></a>
-      <a href="/classes"  class="nav-item {% if '/classes'  in request.path %}active{% endif %}"><i class="fas fa-door-open"></i><span>Classes</span></a>
-      <a href="/rooms"    class="nav-item {% if '/rooms'    in request.path %}active{% endif %}"><i class="fas fa-building"></i><span>Rooms</span></a>
+      <a href="/syllabus-import" id="tour-nav-syllabus" class="nav-item {% if '/syllabus-import' in request.path %}active{% endif %}" style="background:rgba(99,102,241,0.08);"><i class="fas fa-file-import text-primary"></i><span class="fw-bold">Import Syllabus</span></a>
+      <a href="/staff"    id="tour-nav-staff"    class="nav-item {% if '/staff'    in request.path %}active{% endif %}"><i class="fas fa-users"></i><span>Staff</span></a>
+      <a href="/subjects" id="tour-nav-subjects" class="nav-item {% if '/subjects' in request.path %}active{% endif %}"><i class="fas fa-book"></i><span>Subjects</span></a>
+      <a href="/classes"  id="tour-nav-classes"  class="nav-item {% if '/classes'  in request.path %}active{% endif %}"><i class="fas fa-door-open"></i><span>Classes</span></a>
+      <a href="/rooms"    id="tour-nav-rooms"    class="nav-item {% if '/rooms'    in request.path %}active{% endif %}"><i class="fas fa-building"></i><span>Rooms</span></a>
       <span class="nav-label">SCHEDULE</span>
-      <a href="/timetable" class="nav-item {% if '/timetable' in request.path %}active{% endif %}"><i class="fas fa-calendar-alt"></i><span>Timetable</span></a>
-      <a href="/analytics" class="nav-item {% if '/analytics' in request.path %}active{% endif %}"><i class="fas fa-chart-bar"></i><span>Analytics</span></a>
+      <a href="/timetable" id="tour-nav-timetable" class="nav-item {% if '/timetable' in request.path %}active{% endif %}"><i class="fas fa-calendar-alt"></i><span>Timetable</span></a>
+      <a href="/analytics" id="tour-nav-analytics" class="nav-item {% if '/analytics' in request.path %}active{% endif %}"><i class="fas fa-chart-bar"></i><span>Analytics</span></a>
       {% if current_user.role in ('admin', 'creator') %}
       <span class="nav-label">SYSTEM</span>
-      <a href="/settings"  class="nav-item {% if '/settings'  in request.path %}active{% endif %}"><i class="fas fa-cog"></i><span>Settings & Profile</span></a>
+      <a href="/settings"  id="tour-nav-settings"  class="nav-item {% if '/settings'  in request.path %}active{% endif %}"><i class="fas fa-cog"></i><span>Settings & Profile</span></a>
       {% endif %}
     </div>
     <div class="sidebar-footer">
@@ -71,6 +71,9 @@
       <button class="sidebar-toggle" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
       <div class="topbar-title">{% block page_title %}Dashboard{% endblock %}</div>
       <div class="topbar-actions">
+        <button class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1 me-2" onclick="startInteractiveTour(true)" style="font-size:12px;border-radius:6px;background:rgba(99,102,241,0.06);border-color:rgba(99,102,241,0.3);color:var(--primary);" title="Launch Interactive Campus Tour">
+          <i class="fas fa-compass"></i> Guide Tour
+        </button>
         {% if current_user.role == 'admin' %}
           <button class="btn btn-sm btn-outline-secondary d-none d-md-inline-flex align-items-center gap-1 me-2" onclick="openLogoModal(true)" style="font-size:12px;border-radius:6px;">
             <i class="fas fa-cloud-arrow-up"></i> College Logo
@@ -257,10 +260,20 @@ document.addEventListener('DOMContentLoaded', function() {
     const dismissedKey = 'schedhub_logo_dismissed_' + userInstId;
     const isDismissed = localStorage.getItem(dismissedKey);
 
+    window.checkPendingLogoModal = function() {
+      if (userRole === 'admin' && (isFirstLoginServer || (!hasLogoAlready && !isDismissed))) {
+        if (collegeLogoModal && !window.schedhubTourActive) {
+          collegeLogoModal.show();
+        }
+      }
+    };
+
     if (userRole === 'admin' && (isFirstLoginServer || (!hasLogoAlready && !isDismissed))) {
       setTimeout(() => {
-        collegeLogoModal.show();
-      }, 500);
+        if (!window.schedhubTourActive && collegeLogoModal) {
+          collegeLogoModal.show();
+        }
+      }, 700);
     }
   }
 });
@@ -362,5 +375,8 @@ async function removeCollegeLogo() {
 </script>
 
 {% block scripts %}{% endblock %}
+
+<div id="tourTriggerConfig" data-show-tour="{% if show_tour %}true{% else %}false{% endif %}" style="display:none;"></div>
+{% include 'user_tour.html' %}
 </body>
 </html>

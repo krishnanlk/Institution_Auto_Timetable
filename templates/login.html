@@ -565,6 +565,8 @@
         {% endwith %}
 
         <form method="POST" action="/login" id="signInForm">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+          {% if next %}<input type="hidden" name="next" value="{{ next }}"/>{% endif %}
           <div class="input-field-group">
             <label class="input-field-label">
               <span>Institution Code *</span>
@@ -626,6 +628,7 @@
         <p class="form-subtext mb-2">Set up your college & administrator in under a minute</p>
 
         <form method="POST" action="/register" id="signUpForm" onsubmit="return validateSignUp()">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
           
           <div class="section-divider-title">
             <i class="fas fa-university text-indigo-600"></i>
@@ -638,7 +641,7 @@
                 <label class="input-field-label"><span>College Name *</span></label>
                 <div class="input-box-wrap">
                   <i class="fas fa-graduation-cap input-icon"></i>
-                  <input type="text" name="inst_name" class="form-control-academic" placeholder="e.g. LK's Project" required/>
+                  <input type="text" name="inst_name" class="form-control-academic" placeholder="e.g. LK's Project" required maxlength="120"/>
                 </div>
               </div>
             </div>
@@ -647,7 +650,7 @@
                 <label class="input-field-label"><span>College Code *</span></label>
                 <div class="input-box-wrap">
                   <i class="fas fa-id-badge input-icon"></i>
-                  <input type="text" name="inst_code" id="regInstCode" class="form-control-academic" placeholder="e.g. LKP2026" required style="text-transform: uppercase;"/>
+                  <input type="text" name="inst_code" id="regInstCode" class="form-control-academic" placeholder="e.g. LKP2026" required maxlength="32" style="text-transform: uppercase;"/>
                 </div>
               </div>
             </div>
@@ -659,7 +662,7 @@
                 <label class="input-field-label"><span>Official Email *</span></label>
                 <div class="input-box-wrap">
                   <i class="fas fa-envelope-open-text input-icon"></i>
-                  <input type="email" name="inst_email" class="form-control-academic" placeholder="principal@college.edu" required/>
+                  <input type="email" name="inst_email" class="form-control-academic" placeholder="principal@college.edu" required maxlength="100"/>
                 </div>
               </div>
             </div>
@@ -668,7 +671,7 @@
                 <label class="input-field-label"><span>Phone / Contact</span></label>
                 <div class="input-box-wrap">
                   <i class="fas fa-phone input-icon"></i>
-                  <input type="text" name="phone" class="form-control-academic" placeholder="+91 422 123456"/>
+                  <input type="text" name="phone" class="form-control-academic" placeholder="+91 422 123456" maxlength="30"/>
                 </div>
               </div>
             </div>
@@ -678,7 +681,7 @@
             <label class="input-field-label"><span>Campus Address / Location</span></label>
             <div class="input-box-wrap">
               <i class="fas fa-location-dot input-icon"></i>
-              <input type="text" name="address" class="form-control-academic" placeholder="City / Campus Location"/>
+              <input type="text" name="address" class="form-control-academic" placeholder="City / Campus Location" maxlength="200"/>
             </div>
           </div>
 
@@ -693,7 +696,7 @@
                 <label class="input-field-label"><span>Admin User *</span></label>
                 <div class="input-box-wrap">
                   <i class="fas fa-user-check input-icon"></i>
-                  <input type="text" name="username" class="form-control-academic" placeholder="admin" required/>
+                  <input type="text" name="username" class="form-control-academic" placeholder="admin" required maxlength="64"/>
                 </div>
               </div>
             </div>
@@ -702,7 +705,7 @@
                 <label class="input-field-label"><span>Password *</span></label>
                 <div class="input-box-wrap">
                   <i class="fas fa-lock input-icon"></i>
-                  <input type="password" name="password" id="regPassword" class="form-control-academic" placeholder="Min 6 chars" required minlength="6"/>
+                  <input type="password" name="password" id="regPassword" class="form-control-academic" placeholder="Min 8 chars" required minlength="8" maxlength="128"/>
                   <button type="button" class="toggle-pw-btn" onclick="togglePasswordVisibility('regPassword', this)">
                     <i class="fas fa-eye"></i>
                   </button>
@@ -714,7 +717,10 @@
                 <label class="input-field-label"><span>Confirm *</span></label>
                 <div class="input-box-wrap">
                   <i class="fas fa-shield-halved input-icon"></i>
-                  <input type="password" name="confirm_password" id="regConfirmPassword" class="form-control-academic" placeholder="Repeat pw" required/>
+                  <input type="password" name="confirm_password" id="regConfirmPassword" class="form-control-academic" placeholder="Repeat pw" required minlength="8" maxlength="128"/>
+                  <button type="button" class="toggle-pw-btn" onclick="togglePasswordVisibility('regConfirmPassword', this)">
+                    <i class="fas fa-eye"></i>
+                  </button>
                 </div>
               </div>
             </div>
@@ -834,6 +840,16 @@
     function validateSignUp() {
       const p1 = document.getElementById('regPassword').value;
       const p2 = document.getElementById('regConfirmPassword').value;
+      if (!p1 || p1.length < 8) {
+        alert('Password must be at least 8 characters long.');
+        document.getElementById('regPassword').focus();
+        return false;
+      }
+      if (!/[a-zA-Z]/.test(p1) || !(/[0-9]/.test(p1) || /[^a-zA-Z0-9]/.test(p1))) {
+        alert('Password must include at least one letter and at least one number or special character.');
+        document.getElementById('regPassword').focus();
+        return false;
+      }
       if (p1 !== p2) {
         alert('Passwords do not match. Please verify your password entry.');
         document.getElementById('regConfirmPassword').focus();

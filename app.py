@@ -4,11 +4,13 @@ Supports SQLite (dev) and Supabase/PostgreSQL (production) via DATABASE_URL env 
 Run: python app.py
 """
 import os, json, csv, io, time
+from datetime import timedelta
 from werkzeug.utils import secure_filename
 from flask import (Flask, render_template, request, jsonify, redirect,
                    url_for, session, flash, make_response, Response,
                    stream_with_context)
-from database import get_db, init_db, seed_demo_institution, seed_realtime_model, check_password, hash_password, generate_abbreviation
+from database import (get_db, init_db, seed_demo_institution, seed_realtime_model,
+                      check_password, hash_password, is_legacy_hash, generate_abbreviation)
 from scheduler import (
     generate_timetable, generate_timetable_iter,
     get_class_timetable, get_staff_timetable,
@@ -18,12 +20,38 @@ from scheduler import (
     delete_timetable, get_conflict_list, get_slot_staff_options,
     get_class_printable_data,
 )
-from auth import login_required, admin_required, creator_or_admin_required, inject_user, get_current_user
+from auth import (login_required, admin_required, creator_or_admin_required, inject_user,
+                  get_current_user, validate_csrf_token, is_safe_url, auth_limiter,
+                  validate_password_strength)
 from config import FLASK_SECRET_KEY, DB_BACKEND
 import syllabus_parser
 
 app = Flask(__name__)
 app.secret_key = FLASK_SECRET_KEY
+
+# ── OWASP A05: Security Hardened Session Cookie Configuration ──────────────────
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = False  # Set to True over HTTPS in production
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=12)
+
+# ── OWASP A05: HTTP Security Headers (Clickjacking, MIME Sniffing, XSS, CSP) ───
+@app.after_request
+def add_security_headers(response):
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=()"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; "
+        "font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com data:; "
+        "img-src 'self' data: blob: *; "
+        "connect-src 'self';"
+    )
+    return response
 
 # Handle upload directory safely in both local and Vercel serverless environments
 if os.environ.get("VERCEL"):
@@ -72,6 +100,7 @@ class VercelPathFixMiddleware:
 app.wsgi_app = VercelPathFixMiddleware(app.wsgi_app)
 
 @app.route("/api/debug-db")
+@admin_required
 def api_debug_db():
     info = {
         "backend": DB_BACKEND,
@@ -108,7 +137,7 @@ def root():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# AUTH — Register / Login / Logout
+# AUTH — Register / Login / Logout (OWASP Top 10 Hardened)
 # ══════════════════════════════════════════════════════════════════════════════
 
 @app.route("/login", methods=["GET", "POST"])
@@ -116,53 +145,141 @@ def auth_login():
     if session.get("user_id"):
         return redirect(url_for("dashboard"))
     mode = request.args.get("mode", "login")
+    next_url = request.args.get("next") or request.form.get("next") or ""
+    
     if request.method == "POST":
+        # 1. CSRF Verification (OWASP A07 & A05)
+        csrf_token = request.form.get("csrf_token", "")
+        if not validate_csrf_token(csrf_token):
+            flash("Security validation failed (invalid or expired CSRF token). Please try again.", "danger")
+            return render_template("login.html", mode="login", next=next_url)
+
+        # 2. Client identification for rate-limiting
+        ip = request.headers.get("X-Forwarded-For", request.remote_addr or "127.0.0.1").split(",")[0].strip()
         username  = request.form.get("username", "").strip()
         password  = request.form.get("password", "")
         inst_code = request.form.get("inst_code", "").strip().upper()
+        account_key = f"{inst_code}:{username}"
+
+        # 3. Brute-Force & Credential Stuffing Lockout Check (OWASP A04 & A07)
+        ip_locked, ip_wait = auth_limiter.is_locked(ip)
+        acc_locked, acc_wait = auth_limiter.is_locked(account_key)
+        if ip_locked or acc_locked:
+            wait_time = max(ip_wait, acc_wait)
+            flash(f"Too many failed login attempts. Access temporarily locked for security. Please wait {wait_time}s before trying again.", "danger")
+            return render_template("login.html", mode="login", next=next_url)
+
+        # 4. Input bounds check to prevent payload flooding / DoS (OWASP A03)
+        if len(inst_code) > 32 or len(username) > 64 or len(password) > 128 or not inst_code or not username or not password:
+            auth_limiter.record_failure(ip)
+            flash("Invalid college code, username, or password.", "danger")
+            return render_template("login.html", mode="login", next=next_url)
+
+        # 5. Database lookup & timing-attack defense (OWASP A02 & A07)
         with get_db() as conn:
             inst = conn.execute("SELECT * FROM institution WHERE code=?", (inst_code,)).fetchone()
-            if not inst:
-                flash("Institution code not found. Please verify code or register.", "danger")
-                return render_template("login.html", mode="login")
-            user = conn.execute(
-                "SELECT * FROM users WHERE institution_id=? AND username=?",
-                (dict(inst)["id"], username)
-            ).fetchone()
-        if user and check_password(dict(user)["password_hash"], password):
-            user = dict(user)
-            inst = dict(inst)
-            session.update({
-                "user_id": user["id"],
-                "username": user["username"],
-                "institution_id": inst["id"],
-                "institution_name": inst["name"],
-                "role": user["role"],
-            })
-            return redirect(url_for("dashboard"))
-        flash("Invalid username or password for this institution.", "danger")
-        return render_template("login.html", mode="login")
-    return render_template("login.html", mode=mode)
+            user = None
+            if inst:
+                user = conn.execute(
+                    "SELECT * FROM users WHERE institution_id=? AND username=?",
+                    (dict(inst)["id"], username)
+                ).fetchone()
+
+        # Constant-time verification: check dummy hash if user or inst not found to prevent timing side-channel enumeration
+        dummy_hash = "pbkdf2:sha256:600000$dummy$0000000000000000000000000000000000000000000000000000000000000000"
+        stored_hash = dict(user)["password_hash"] if user else dummy_hash
+        pwd_valid = check_password(stored_hash, password)
+
+        if not inst or not user or not pwd_valid:
+            auth_limiter.record_failure(ip)
+            auth_limiter.record_failure(account_key)
+            print(f"[AUTH SECURITY] Failed login attempt from IP={ip} for inst={inst_code} username={username}")
+            flash("Invalid college code, username, or password.", "danger")
+            return render_template("login.html", mode="login", next=next_url)
+
+        # 6. Login Success: Reset rate limit counters
+        auth_limiter.reset(ip)
+        auth_limiter.reset(account_key)
+        user = dict(user)
+        inst = dict(inst)
+        print(f"[AUTH SECURITY] Successful login for user='{user['username']}' at institution='{inst['code']}' (IP={ip})")
+
+        # 7. Silent Auto-Upgrade of Legacy Hashes to PBKDF2 (OWASP A02)
+        if is_legacy_hash(user.get("password_hash", "")):
+            try:
+                new_hash = hash_password(password)
+                with get_db() as conn:
+                    conn.execute("UPDATE users SET password_hash=? WHERE id=?", (new_hash, user["id"]))
+                print(f"[AUTH SECURITY] Auto-upgraded password hash to PBKDF2 for user id={user['id']}")
+            except Exception as _rehash_err:
+                print(f"[AUTH] Silent hash upgrade warning: {_rehash_err}")
+
+        # 8. Session Fixation Defense: clear and regenerate session (OWASP A01 & A07)
+        session.clear()
+        session.permanent = True
+        session.update({
+            "user_id": user["id"],
+            "username": user["username"],
+            "institution_id": inst["id"],
+            "institution_name": inst["name"],
+            "role": user["role"],
+        })
+
+        # Interactive Onboarding Tour: Trigger every time when logging in with demo credentials
+        if inst_code == "DEMO2024":
+            session["show_tour"] = True
+
+        # 9. Open Redirect Defense (OWASP A01)
+        if next_url and is_safe_url(next_url):
+            return redirect(next_url)
+        return redirect(url_for("dashboard"))
+
+    return render_template("login.html", mode=mode, next=next_url)
 
 
 @app.route("/register", methods=["GET", "POST"])
 def auth_register():
+    if session.get("user_id"):
+        return redirect(url_for("dashboard"))
     if request.method == "POST":
+        # 1. CSRF Verification
+        csrf_token = request.form.get("csrf_token", "")
+        if not validate_csrf_token(csrf_token):
+            flash("Security validation failed (invalid or expired CSRF token). Please try again.", "danger")
+            return render_template("login.html", mode="register")
+
         inst_name   = request.form.get("inst_name", "").strip()
         inst_code   = request.form.get("inst_code", "").strip().upper()
         inst_email  = request.form.get("inst_email", "").strip()
         admin_email = request.form.get("admin_email", "").strip() or inst_email
         username    = request.form.get("username", "").strip()
         password    = request.form.get("password", "")
+        confirm_pw  = request.form.get("confirm_password", "")
         address     = request.form.get("address", "").strip()
         phone       = request.form.get("phone", "").strip()
         logo_url    = ""
         logo_text   = "🎓"
 
+        # 2. Field completeness and length constraints (OWASP A03)
         if not inst_name or not inst_code or not username or not password:
             flash("Please fill in all mandatory fields.", "danger")
             return render_template("login.html", mode="register")
 
+        if len(inst_name) > 120 or len(inst_code) > 32 or len(username) > 64 or len(password) > 128:
+            flash("One or more fields exceed maximum allowed character limits.", "danger")
+            return render_template("login.html", mode="register")
+
+        # 3. Password matching & complexity policy (OWASP A07)
+        if password != confirm_pw:
+            flash("Passwords do not match. Please verify your password entry.", "danger")
+            return render_template("login.html", mode="register")
+
+        pwd_valid, pwd_msg = validate_password_strength(password)
+        if not pwd_valid:
+            flash(pwd_msg, "danger")
+            return render_template("login.html", mode="register")
+
+        # 4. Create institution & master admin
         with get_db() as conn:
             if conn.execute("SELECT 1 FROM institution WHERE code=?", (inst_code,)).fetchone():
                 flash(f"Institution code '{inst_code}' is already registered. Please choose another or sign in.", "danger")
@@ -197,6 +314,9 @@ def auth_register():
                     (new_inst_id,) + s
                 )
 
+        # 5. Session Fixation Defense: clear and regenerate session
+        session.clear()
+        session.permanent = True
         session.update({
             "user_id": user_id,
             "username": username,
@@ -204,6 +324,7 @@ def auth_register():
             "institution_name": inst_name,
             "role": "admin",
             "first_login": True,
+            "show_tour": True,
         })
         flash(f"Institution '{inst_name}' registered successfully! Welcome to SchedHub.", "success")
         return redirect(url_for("dashboard"))
