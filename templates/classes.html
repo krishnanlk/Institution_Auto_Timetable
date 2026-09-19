@@ -16,8 +16,8 @@
     <div class="cc-meta"><h4>{{ c.name }}</h4><span class="dept-tag">{{ c.department }}</span></div>
     <div class="sc-actions">
       {% if current_user.role in ('admin', 'creator') %}
-      <button class="btn-icon-sm blue" onclick="editClass({{ c.id }})"><i class="fas fa-edit"></i></button>
-      <button class="btn-icon-sm red" onclick="delClass({{ c.id }})"><i class="fas fa-trash"></i></button>
+      <button class="btn-icon-sm blue" onclick="editClass('{{ c.id }}')"><i class="fas fa-edit"></i></button>
+      <button class="btn-icon-sm red" onclick="delClass('{{ c.id }}')"><i class="fas fa-trash"></i></button>
       {% endif %}
     </div>
   </div>

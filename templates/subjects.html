@@ -28,11 +28,11 @@
     <td>
       <div class="act-row">
         {% if current_user.role in ('admin', 'creator') %}
-        <button class="btn-icon-sm blue" onclick="editSubject({{ s.id }})"><i class="fas fa-edit"></i></button>
+        <button class="btn-icon-sm blue" onclick="editSubject('{{ s.id }}')"><i class="fas fa-edit"></i></button>
         {% endif %}
-        <button class="btn-icon-sm amber" onclick="showRec({{ s.id }},'{{ s.subject_name }}')" title="Recommend Staff"><i class="fas fa-lightbulb"></i></button>
+        <button class="btn-icon-sm amber" onclick="showRec('{{ s.id }}','{{ s.subject_name }}')" title="Recommend Staff"><i class="fas fa-lightbulb"></i></button>
         {% if current_user.role in ('admin', 'creator') %}
-        <button class="btn-icon-sm red" onclick="delSubject({{ s.id }})"><i class="fas fa-trash"></i></button>
+        <button class="btn-icon-sm red" onclick="delSubject('{{ s.id }}')"><i class="fas fa-trash"></i></button>
         {% endif %}
       </div>
     </td>
@@ -152,7 +152,7 @@ function openAddModal(){
 }
 async function editSubject(id){
   const rows=await fetch('/api/subjects').then(r=>r.json());
-  const s=rows.find(x=>x.id===id); if(!s)return;
+  const s=rows.find(x=>x.id==id); if(!s)return;
   document.getElementById('subModalTitle').textContent='Edit Subject';
   document.getElementById('subjectId').value=s.id;
   document.getElementById('subName').value=s.subject_name;

@@ -41,10 +41,10 @@
         <td>{{ r.capacity }} seats</td>
         {% if current_user.role in ('admin', 'creator') %}
         <td>
-          <button class="btn-icon" onclick="openEditRoom({{ r.id }}, '{{ r.name }}', {{ r.capacity }}, '{{ r.room_type }}')" title="Edit">
+          <button class="btn-icon" onclick="openEditRoom('{{ r.id }}', '{{ r.name }}', '{{ r.capacity }}', '{{ r.room_type }}')" title="Edit">
             <i class="fas fa-pen"></i>
           </button>
-          <button class="btn-icon btn-icon-danger" onclick="deleteRoom({{ r.id }}, '{{ r.name }}')" title="Delete">
+          <button class="btn-icon btn-icon-danger" onclick="deleteRoom('{{ r.id }}', '{{ r.name }}')" title="Delete">
             <i class="fas fa-trash"></i>
           </button>
         </td>

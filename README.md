@@ -1,6 +1,6 @@
-# 🏛️ Institution Auto Timetable (SchedHub v1.1.0)
+# 🏛️ Institution Auto Timetable (SchedHub v1.1.1)
 
-An enterprise-grade, multi-tenant institutional timetable scheduling and faculty management system engineered for **Colleges, Universities, and K-12 Schools**. Features an autonomous constraint-satisfaction scheduling engine, real-time clash prevention across 20+ departments, official 1-page printable timetable generation, drag-and-drop schedule editing, and dual-backend persistence (SQLite & Supabase PostgreSQL).
+An enterprise-grade, multi-tenant institutional timetable scheduling and faculty management system engineered for **Colleges, Universities, and K-12 Schools**. Features an autonomous constraint-satisfaction scheduling engine, real-time clash prevention across 20+ departments, official 1-page printable timetable generation, drag-and-drop schedule editing, dual-backend persistence (SQLite & Supabase PostgreSQL), OWASP Top 10 security hardening, and an interactive onboarding tour.
 
 ---
 
@@ -48,6 +48,19 @@ An enterprise-grade, multi-tenant institutional timetable scheduling and faculty
 ### 5. 🗄️ Dual-Backend Database Architecture
 - **SQLite3 (Development)**: Zero-config local database (`edupro.db`) with automatic table creation, migrations, and seed data.
 - **Supabase / PostgreSQL (Production)**: Seamless connection pooling via `DATABASE_URL` for cloud environments.
+
+### 6. 🛡️ OWASP Top 10 Security Hardening & Interactive User Tour (v1.1.1)
+- **Enterprise Cybersecurity Protections**:
+  - **A01/A05 Access & Cookie Defense**: `/api/debug-db` lockdown with `@admin_required`, open redirect validation (`is_safe_url`), session fixation prevention (`session.clear()`), and secure `HttpOnly` / `SameSite=Lax` cookies.
+  - **A02 Cryptographic Hardening**: PBKDF2:SHA256 password hashing with constant-time verification (`hmac.compare_digest`), dummy response equalization, and silent legacy hash auto-upgrade.
+  - **A04 Brute-Force & Credential Stuffing Defense**: Sliding window rate limiting (`AuthRateLimiter`) enforcing 60s cooldowns after 5 consecutive failures.
+  - **A07 Identification & CSRF Defense**: Cryptographic session-bound CSRF tokens across all authentication forms, plus an 8+ character password policy.
+  - **A05 Security Headers**: HTTP response headers (`X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, and Content-Security-Policy).
+- **Interactive Side Dashboard Onboarding Tour**:
+  - **100% Clear & Interactive Background**: Zero backdrop blur and zero click blocking—users can freely browse and interact with the page while the tour card floats beside the active module.
+  - **Auto-Close on Background Touch**: Simply tapping or clicking anywhere on the background automatically closes the tour.
+  - **Prominent "Skip for now"**: Instant single-click dismissal on every step.
+  - **Smart Trigger Logic**: Triggers automatically on new college registration and on every demo login (`DEMO2024 / admin`), with a manual `Guide Tour` launcher in the topbar.
 
 ---
 
@@ -146,9 +159,10 @@ Institution_Auto_Timetable/
 │   ├── subjects.html       # Course catalog & allocation recommendations
 │   ├── classes.html        # Sections & room assignments
 │   ├── analytics.html      # Workload distribution charts & rankings
-│   └── settings.html       # Institution branding, period slots & presets
+│   ├── settings.html       # Institution branding, period slots & presets
+│   └── user_tour.html      # Interactive side dashboard onboarding tour component
 ├── app.py                  # Flask application routes & SSE endpoints
-├── auth.py                 # RBAC decorators & session helpers
+├── auth.py                 # RBAC decorators, rate limiter & CSRF defense
 ├── config.py               # Environment configuration & DB backend detection
 ├── database.py             # Dual DB adapter (SQLite & Supabase PostgreSQL)
 ├── scheduler.py            # Constraint satisfaction scheduling engine
@@ -157,6 +171,7 @@ Institution_Auto_Timetable/
 ├── vercel.json             # Vercel serverless routing configuration
 ├── .vercelignore           # Deployment bundle exclusion list
 ├── VERCEL_DEPLOYMENT.md    # Dedicated cloud deployment guide
+├── RELEASE_NOTES_v1.1.1.md # Complete v1.1.1 release notes & audit report
 └── README.md               # Documentation
 ```
 
