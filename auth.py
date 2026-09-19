@@ -154,6 +154,13 @@ def admin_required(f):
 def get_current_user():
     if "user_id" not in session:
         return None
+    try:
+        from flask import has_request_context, g
+        if has_request_context() and hasattr(g, "_cached_user"):
+            return g._cached_user
+    except ImportError:
+        pass
+
     with get_db() as conn:
         u = conn.execute(
             "SELECT u.*, i.name as inst_name, i.code as inst_code, i.logo_text, i.logo_url, "
@@ -161,7 +168,16 @@ def get_current_user():
             "FROM users u JOIN institution i ON i.id=u.institution_id WHERE u.id=?",
             (session["user_id"],)
         ).fetchone()
-        return dict(u) if u else None
+        user_dict = dict(u) if u else None
+
+    try:
+        from flask import has_request_context, g
+        if has_request_context():
+            g._cached_user = user_dict
+    except ImportError:
+        pass
+
+    return user_dict
 
 
 def inject_user(app):

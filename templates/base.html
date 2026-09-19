@@ -190,7 +190,7 @@
 {% endif %}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
 <script src="/static/js/app.js"></script>
 
 <script id="schedhub-base-config" type="application/json">
@@ -213,6 +213,23 @@ const isFirstLoginServer = Boolean(_baseCfg.isFirstLoginServer);
 const hasLogoAlready = Boolean(_baseCfg.hasLogoAlready);
 
 document.addEventListener('DOMContentLoaded', function() {
+  // Instant feature switching: prefetch on hover/touch for instant page transitions
+  const prefetchedUrls = new Set();
+  document.querySelectorAll('.sidebar-nav a.nav-item').forEach(link => {
+    const doPrefetch = () => {
+      const url = link.href;
+      if (!url || prefetchedUrls.has(url) || url.includes('logout') || url.startsWith('javascript:')) return;
+      prefetchedUrls.add(url);
+      const prefetchEl = document.createElement('link');
+      prefetchEl.rel = 'prefetch';
+      prefetchEl.href = url;
+      prefetchEl.as = 'document';
+      document.head.appendChild(prefetchEl);
+    };
+    link.addEventListener('mouseenter', doPrefetch, { passive: true });
+    link.addEventListener('touchstart', doPrefetch, { passive: true });
+  });
+
   const modalEl = document.getElementById('collegeLogoModal');
   if (modalEl) {
     collegeLogoModal = new bootstrap.Modal(modalEl, {

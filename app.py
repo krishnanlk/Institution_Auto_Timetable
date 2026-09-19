@@ -10,7 +10,8 @@ from flask import (Flask, render_template, request, jsonify, redirect,
                    url_for, session, flash, make_response, Response,
                    stream_with_context)
 from database import (get_db, init_db, seed_demo_institution, seed_realtime_model,
-                      check_password, hash_password, is_legacy_hash, generate_abbreviation)
+                      check_password, hash_password, is_legacy_hash, generate_abbreviation,
+                      close_request_db)
 from scheduler import (
     generate_timetable, generate_timetable_iter,
     get_class_timetable, get_staff_timetable,
@@ -76,6 +77,10 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 inject_user(app)
+
+@app.teardown_appcontext
+def shutdown_session(exception=None):
+    close_request_db(exception)
 
 def inst_id():
     return session.get("institution_id")
@@ -700,22 +705,35 @@ def staff_page():
         staff_rows = conn.execute("SELECT * FROM staff WHERE institution_id=? ORDER BY name", (iid,)).fetchall()
         subj_rows  = conn.execute("SELECT * FROM subject WHERE institution_id=? ORDER BY subject_name", (iid,)).fetchall()
         dept_rows  = conn.execute("SELECT * FROM department WHERE institution_id=? ORDER BY category, code", (iid,)).fetchall()
+
+        # Batch load all staff-subject mappings for this institution in 1 query
+        mapping_rows = conn.execute("""
+            SELECT ss.staff_id, ss.subject_id, s.subject_name
+            FROM staff_subjects ss
+            JOIN subject s ON s.id = ss.subject_id
+            JOIN staff st ON st.id = ss.staff_id
+            WHERE st.institution_id=?
+        """, (iid,)).fetchall()
+
+        from collections import defaultdict
+        staff_sids = defaultdict(list)
+        staff_snames = defaultdict(list)
+        for m in mapping_rows:
+            staff_sids[m["staff_id"]].append(m["subject_id"])
+            staff_snames[m["staff_id"]].append(m["subject_name"])
+
         staff_list = []
         for s in staff_rows:
             s = dict(s)
-            sids = [r["subject_id"] for r in conn.execute(
-                "SELECT subject_id FROM staff_subjects WHERE staff_id=?", (s["id"],)
-            ).fetchall()]
-            snames = []
-            if sids:
-                placeholders = ",".join("?" * len(sids))
-                snames = [dict(r)["subject_name"] for r in conn.execute(
-                    f"SELECT subject_name FROM subject WHERE id IN ({placeholders})", sids
-                ).fetchall()]
+            sid = s["id"]
+            sids = staff_sids.get(sid, [])
+            snames = staff_snames.get(sid, [])
             pct = round(s["allocated_periods"] / s["max_periods_per_week"] * 100
                         if s["max_periods_per_week"] else 0, 1)
-            staff_list.append({**s, "subject_ids": sids, "subject_names": snames, "pct": pct,
-                               "performance_score": round(s["allocated_periods"] * 0.4 + s["experience"] * 0.3, 2)})
+            staff_list.append({
+                **s, "subject_ids": sids, "subject_names": snames, "pct": pct,
+                "performance_score": round(s["allocated_periods"] * 0.4 + s["experience"] * 0.3, 2)
+            })
     return render_template("staff.html", staff=staff_list, subjects=[dict(r) for r in subj_rows], departments=[dict(r) for r in dept_rows])
 
 
@@ -725,13 +743,21 @@ def api_get_staff():
     iid = inst_id()
     with get_db() as conn:
         rows = conn.execute("SELECT * FROM staff WHERE institution_id=? ORDER BY name", (iid,)).fetchall()
+        mapping_rows = conn.execute("""
+            SELECT ss.staff_id, ss.subject_id
+            FROM staff_subjects ss
+            JOIN staff st ON st.id = ss.staff_id
+            WHERE st.institution_id=?
+        """, (iid,)).fetchall()
+        from collections import defaultdict
+        staff_sids = defaultdict(list)
+        for m in mapping_rows:
+            staff_sids[m["staff_id"]].append(m["subject_id"])
+
         result = []
         for s in rows:
             s = dict(s)
-            sids = [r["subject_id"] for r in conn.execute(
-                "SELECT subject_id FROM staff_subjects WHERE staff_id=?", (s["id"],)
-            ).fetchall()]
-            result.append({**s, "subjects": sids})
+            result.append({**s, "subjects": staff_sids.get(s["id"], [])})
     return jsonify(result)
 
 
@@ -892,20 +918,42 @@ def classes_page():
         cls_rows  = conn.execute("SELECT * FROM class_section WHERE institution_id=? ORDER BY name", (iid,)).fetchall()
         subj_rows = conn.execute("SELECT * FROM subject WHERE institution_id=? ORDER BY subject_name", (iid,)).fetchall()
         staff_rows = conn.execute("SELECT id, name, department FROM staff WHERE institution_id=? ORDER BY name", (iid,)).fetchall()
+
+        # Batch load all class-subject mappings in 1 query
+        cs_rows = conn.execute("""
+            SELECT cs.class_id, s.subject_name
+            FROM class_subjects cs
+            JOIN subject s ON s.id = cs.subject_id
+            JOIN class_section c ON c.id = cs.class_id
+            WHERE c.institution_id=?
+        """, (iid,)).fetchall()
+        from collections import defaultdict
+        class_subjs = defaultdict(list)
+        for r in cs_rows:
+            class_subjs[r["class_id"]].append(r["subject_name"])
+
+        # Batch load all class mentors in 1 query
+        mentor_rows = conn.execute("""
+            SELECT cm.class_id, cm.staff_id, st.name as staff_name
+            FROM class_mentor cm
+            JOIN staff st ON st.id = cm.staff_id
+            JOIN class_section c ON c.id = cm.class_id
+            WHERE c.institution_id=?
+            ORDER BY cm.mentor_order
+        """, (iid,)).fetchall()
+        class_mentors = defaultdict(list)
+        for m in mentor_rows:
+            class_mentors[m["class_id"]].append(dict(m))
+
         classes = []
         for c in cls_rows:
             c = dict(c)
-            snames = [dict(r)["subject_name"] for r in conn.execute("""
-                SELECT s.subject_name FROM subject s
-                JOIN class_subjects cs ON cs.subject_id=s.id WHERE cs.class_id=?
-            """, (c["id"],)).fetchall()]
-            mentor_rows = conn.execute(
-                "SELECT cm.staff_id, st.name as staff_name FROM class_mentor cm "
-                "JOIN staff st ON st.id=cm.staff_id WHERE cm.class_id=? ORDER BY cm.mentor_order",
-                (c["id"],)
-            ).fetchall()
-            mentors = [dict(m) for m in mentor_rows]
-            classes.append({**c, "subject_names": snames, "mentors": mentors})
+            cid = c["id"]
+            classes.append({
+                **c,
+                "subject_names": class_subjs.get(cid, []),
+                "mentors": class_mentors.get(cid, [])
+            })
     return render_template("classes.html", classes=classes,
                            subjects=[dict(r) for r in subj_rows],
                            staff_list=[dict(r) for r in staff_rows])
@@ -917,16 +965,40 @@ def api_get_classes():
     iid = inst_id()
     with get_db() as conn:
         rows = conn.execute("SELECT * FROM class_section WHERE institution_id=? ORDER BY name", (iid,)).fetchall()
+
+        # Batch load class subjects
+        cs_rows = conn.execute("""
+            SELECT cs.class_id, cs.subject_id
+            FROM class_subjects cs
+            JOIN class_section c ON c.id = cs.class_id
+            WHERE c.institution_id=?
+        """, (iid,)).fetchall()
+        from collections import defaultdict
+        class_sids = defaultdict(list)
+        for r in cs_rows:
+            class_sids[r["class_id"]].append(r["subject_id"])
+
+        # Batch load class mentors
+        mentor_rows = conn.execute("""
+            SELECT cm.class_id, cm.staff_id
+            FROM class_mentor cm
+            JOIN class_section c ON c.id = cm.class_id
+            WHERE c.institution_id=?
+            ORDER BY cm.mentor_order
+        """, (iid,)).fetchall()
+        class_mentors = defaultdict(list)
+        for m in mentor_rows:
+            class_mentors[m["class_id"]].append(m["staff_id"])
+
         result = []
         for c in rows:
             c = dict(c)
-            sids = [r["subject_id"] for r in conn.execute(
-                "SELECT subject_id FROM class_subjects WHERE class_id=?", (c["id"],)
-            ).fetchall()]
-            mentor_ids = [r["staff_id"] for r in conn.execute(
-                "SELECT staff_id FROM class_mentor WHERE class_id=? ORDER BY mentor_order", (c["id"],)
-            ).fetchall()]
-            result.append({**c, "subjects": sids, "mentor_ids": mentor_ids})
+            cid = c["id"]
+            result.append({
+                **c,
+                "subjects": class_sids.get(cid, []),
+                "mentor_ids": class_mentors.get(cid, [])
+            })
     return jsonify(result)
 
 
@@ -1251,10 +1323,10 @@ def timetable_page():
         inst = conn.execute("SELECT institution_type FROM institution WHERE id=?", (iid,)).fetchone()
         inst_type = inst["institution_type"] if inst and "institution_type" in inst.keys() else "college"
 
-    days         = get_working_days(iid)
-    periods      = get_period_count(iid)
-    period_slots = get_period_slots(iid)
-    conflicts    = get_conflict_list(iid)
+        days         = get_working_days(iid, conn=conn)
+        periods      = get_period_count(iid, conn=conn)
+        period_slots = get_period_slots(iid, conn=conn)
+        conflicts    = get_conflict_list(iid, conn=conn)
 
     return render_template("timetable.html",
                            classes=classes,

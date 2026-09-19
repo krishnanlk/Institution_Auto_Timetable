@@ -17,6 +17,7 @@ KEY FIXES over v2:
 from __future__ import annotations
 import math
 import random
+from collections import defaultdict
 from typing import Generator, Optional, Iterator
 from database import get_db, generate_abbreviation
 
@@ -32,50 +33,72 @@ DAY_SHORT = {v: k for k, v in DAY_MAP.items()}
 # Config helpers
 # ══════════════════════════════════════════════════════════════════════════════
 
-def get_working_days(institution_id: int) -> list[str]:
-    with get_db() as conn:
+def get_working_days(institution_id: int, conn=None) -> list[str]:
+    if conn is not None:
         cfg = conn.execute(
             "SELECT working_days FROM time_config WHERE institution_id=?",
             (institution_id,)
         ).fetchone()
+    else:
+        with get_db() as c:
+            cfg = c.execute(
+                "SELECT working_days FROM time_config WHERE institution_id=?",
+                (institution_id,)
+            ).fetchone()
     if not cfg:
         return ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
     return [DAY_MAP.get(d.strip(), d.strip()) for d in cfg["working_days"].split(",")]
 
 
-def get_period_count(institution_id: int) -> int:
+def get_period_count(institution_id: int, conn=None) -> int:
     """Count of teaching (non-break/lunch) slots per day."""
-    with get_db() as conn:
-        row = conn.execute(
+    def _fetch(c):
+        row = c.execute(
             "SELECT COUNT(*) as cnt FROM period_slot WHERE institution_id=? AND slot_type='period'",
             (institution_id,)
         ).fetchone()
         cnt = row["cnt"] if row else 0
         if cnt:
             return cnt
-        cfg = conn.execute(
+        cfg = c.execute(
             "SELECT periods_per_day FROM time_config WHERE institution_id=?",
             (institution_id,)
         ).fetchone()
         return cfg["periods_per_day"] if cfg else 6
 
+    if conn is not None:
+        return _fetch(conn)
+    with get_db() as c:
+        return _fetch(c)
 
-def get_teaching_slot_orders(institution_id: int) -> list[int]:
+
+def get_teaching_slot_orders(institution_id: int, conn=None) -> list[int]:
     """Sorted slot_order values for period-type slots only (no breaks/lunch)."""
-    with get_db() as conn:
+    if conn is not None:
         rows = conn.execute(
             "SELECT slot_order FROM period_slot WHERE institution_id=? AND slot_type='period' ORDER BY slot_order",
             (institution_id,)
         ).fetchall()
+    else:
+        with get_db() as c:
+            rows = c.execute(
+                "SELECT slot_order FROM period_slot WHERE institution_id=? AND slot_type='period' ORDER BY slot_order",
+                (institution_id,)
+            ).fetchall()
     if rows:
         return [r["slot_order"] for r in rows]
-    return list(range(1, get_period_count(institution_id) + 1))
+    return list(range(1, get_period_count(institution_id, conn=conn) + 1))
 
 
-def get_period_slots(institution_id: int) -> list[dict]:
+def get_period_slots(institution_id: int, conn=None) -> list[dict]:
     """All slots including breaks for display."""
-    with get_db() as conn:
+    if conn is not None:
         return [dict(r) for r in conn.execute(
+            "SELECT * FROM period_slot WHERE institution_id=? ORDER BY slot_order",
+            (institution_id,)
+        ).fetchall()]
+    with get_db() as c:
+        return [dict(r) for r in c.execute(
             "SELECT * FROM period_slot WHERE institution_id=? ORDER BY slot_order",
             (institution_id,)
         ).fetchall()]
@@ -1509,20 +1532,25 @@ def get_staff_timetable(staff_id: int, institution_id: int) -> tuple[Optional[in
         return tt["id"], grid
 
 
-def get_conflict_list(institution_id: int) -> list[dict]:
+def get_conflict_list(institution_id: int, conn=None) -> list[dict]:
     """Fetch detailed conflict list from the conflict_log table."""
-    with get_db() as conn:
-        tt = conn.execute(
+    def _fetch(c):
+        tt = c.execute(
             "SELECT id FROM timetable WHERE institution_id=? AND is_active=1 ORDER BY id DESC LIMIT 1",
             (institution_id,)
         ).fetchone()
         if not tt:
             return []
-        rows = conn.execute(
-            "SELECT * FROM conflict_log WHERE timetable_id=? ORDER BY id",
-            (tt["id"],)
+        rows = c.execute(
+            "SELECT * FROM conflict_log WHERE timetable_id=? AND institution_id=? ORDER BY id",
+            (tt["id"], institution_id)
         ).fetchall()
         return [dict(r) for r in rows]
+
+    if conn is not None:
+        return _fetch(conn)
+    with get_db() as c:
+        return _fetch(c)
 
 
 def get_slot_staff_options(slot_id: int, institution_id: int) -> list[dict]:
@@ -1608,27 +1636,47 @@ def get_recommendations(subject_id: int, institution_id: int, top_n: int = 5) ->
         return results[:top_n]
 
 
-def compute_analytics(institution_id: int) -> list[dict]:
-    with get_db() as conn:
-        staff_list = conn.execute(
+def compute_analytics(institution_id: int, conn=None) -> list[dict]:
+    def _compute(c):
+        staff_list = c.execute(
             "SELECT * FROM staff WHERE institution_id=? ORDER BY name", (institution_id,)
         ).fetchall()
+        if not staff_list:
+            return []
+
+        # Batch 1: Average difficulty level for active timetable per staff (1 query instead of N)
+        avg_diff_rows = c.execute("""
+            SELECT ts.staff_id, AVG(sub.difficulty_level) as avg_diff
+            FROM timetable_slot ts
+            JOIN subject sub ON sub.id=ts.subject_id
+            JOIN timetable tt ON tt.id=ts.timetable_id
+            WHERE tt.is_active=1 AND tt.institution_id=?
+            GROUP BY ts.staff_id
+        """, (institution_id,)).fetchall()
+        avg_diff_map = {
+            r["staff_id"]: (float(r["avg_diff"]) if r["avg_diff"] is not None else 0.0)
+            for r in avg_diff_rows
+        }
+
+        # Batch 2: Staff subjects mapping for this institution (1 query instead of N)
+        subj_rows = c.execute("""
+            SELECT ss.staff_id, sub.subject_name
+            FROM subject sub
+            JOIN staff_subjects ss ON ss.subject_id=sub.id
+            JOIN staff st ON st.id=ss.staff_id
+            WHERE st.institution_id=?
+        """, (institution_id,)).fetchall()
+        staff_subjs = defaultdict(list)
+        for r in subj_rows:
+            staff_subjs[r["staff_id"]].append(r["subject_name"])
+
         scored = []
         for s in staff_list:
             s = dict(s)
-            row = conn.execute("""
-                SELECT AVG(sub.difficulty_level) as avg_diff
-                FROM timetable_slot ts
-                JOIN subject sub ON sub.id=ts.subject_id
-                JOIN timetable tt ON tt.id=ts.timetable_id
-                WHERE ts.staff_id=? AND tt.is_active=1 AND tt.institution_id=?
-            """, (s["id"], institution_id)).fetchone()
-            avg_diff = (dict(row)["avg_diff"] or 0) if row else 0
+            sid = s["id"]
+            avg_diff = avg_diff_map.get(sid, 0.0)
             score = round(s["allocated_periods"] * 0.4 + s["experience"] * 0.3 + avg_diff * 0.3, 2)
-            subjs = [dict(r)["subject_name"] for r in conn.execute("""
-                SELECT sub.subject_name FROM subject sub
-                JOIN staff_subjects ss ON ss.subject_id=sub.id WHERE ss.staff_id=?
-            """, (s["id"],)).fetchall()]
+            subjs = staff_subjs.get(sid, [])
             pct = round(
                 s["allocated_periods"] / s["max_periods_per_week"] * 100
                 if s["max_periods_per_week"] else 0, 1
@@ -1651,3 +1699,8 @@ def compute_analytics(institution_id: int) -> list[dict]:
                 "badge": badge, "overload_pct": s["overload_pct"]
             })
         return results
+
+    if conn is not None:
+        return _compute(conn)
+    with get_db() as c:
+        return _compute(c)

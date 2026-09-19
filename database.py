@@ -122,16 +122,39 @@ class DBAdapter:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Connection factory
+# Connection pool & factory
 # ══════════════════════════════════════════════════════════════════════════════
 
+_PG_POOL = None
+
+def _get_pg_pool():
+    global _PG_POOL
+    if _PG_POOL is None and DB_BACKEND == "postgres":
+        import psycopg2.pool
+        try:
+            _PG_POOL = psycopg2.pool.ThreadedConnectionPool(
+                minconn=2,
+                maxconn=20,
+                dsn=DATABASE_URL,
+                connect_timeout=10,
+                sslmode="require"
+            )
+        except Exception as e:
+            try:
+                _PG_POOL = psycopg2.pool.ThreadedConnectionPool(
+                    minconn=2,
+                    maxconn=20,
+                    dsn=DATABASE_URL,
+                    connect_timeout=10
+                )
+            except Exception as e2:
+                print(f"[WARN] PostgreSQL connection pool failed ({e2}).")
+                _PG_POOL = None
+    return _PG_POOL
+
+
 def _make_raw_conn():
-    """Return a raw DB connection based on the configured backend, with SQLite fallback if PG is unreachable.
-    
-    Note: Supabase Transaction Pooler uses IPv6 by default. For Vercel (IPv4 only),
-    configure DATABASE_URL to use the Direct Connection (port 5432) or enable
-    the Supabase IPv4 add-on for Transaction Pooler.
-    """
+    """Return a raw DB connection based on the configured backend, with SQLite fallback if PG is unreachable."""
     if DB_BACKEND == "sqlite":
         conn = sqlite3.connect(SQLITE_PATH, timeout=30, check_same_thread=False)
         conn.row_factory = sqlite3.Row
@@ -142,13 +165,10 @@ def _make_raw_conn():
     else:
         import psycopg2
         try:
-            # Increase timeout to 10s for Supabase cold starts on Vercel
-            conn = psycopg2.connect(DATABASE_URL, connect_timeout=10,
-                                    sslmode="require")
+            conn = psycopg2.connect(DATABASE_URL, connect_timeout=10, sslmode="require")
             conn.autocommit = False
             return conn, "postgres"
-        except Exception as e:
-            # Try without forcing SSL (in case the URL already includes sslmode)
+        except Exception:
             try:
                 conn = psycopg2.connect(DATABASE_URL, connect_timeout=10)
                 conn.autocommit = False
@@ -163,21 +183,117 @@ def _make_raw_conn():
                 return conn, "sqlite"
 
 
+def _checkout_raw_conn():
+    """Returns (conn, backend_str, is_pooled_bool). Uses pool when available."""
+    if DB_BACKEND == "sqlite":
+        conn, backend = _make_raw_conn()
+        return conn, backend, False
+
+    pool = _get_pg_pool()
+    if pool:
+        try:
+            conn = pool.getconn()
+            if conn.closed != 0:
+                pool.putconn(conn, close=True)
+                conn = pool.getconn()
+            conn.autocommit = False
+            return conn, "postgres", True
+        except Exception as e:
+            print(f"[WARN] Pool checkout error: {e}. Falling back to direct connection.")
+
+    conn, backend = _make_raw_conn()
+    return conn, backend, False
+
+
+def close_request_db(e=None):
+    """Teardown handler to commit/rollback and safely release DB connections back to the pool."""
+    try:
+        from flask import g
+        raw_info = getattr(g, "_raw_db", None)
+        if raw_info is not None:
+            raw_conn, backend, is_pooled = raw_info
+            g._raw_db = None
+            g._db_adapter = None
+            if e is not None:
+                try:
+                    raw_conn.rollback()
+                except Exception:
+                    pass
+            else:
+                try:
+                    raw_conn.commit()
+                except Exception:
+                    pass
+
+            if is_pooled and _PG_POOL:
+                try:
+                    # Clear transaction state before putting back into pool
+                    raw_conn.rollback()
+                    _PG_POOL.putconn(raw_conn)
+                except Exception:
+                    try:
+                        raw_conn.close()
+                    except Exception:
+                        pass
+            else:
+                try:
+                    raw_conn.close()
+                except Exception:
+                    pass
+    except Exception:
+        pass
 
 
 @contextmanager
 def get_db():
-    """Context manager that yields a DBAdapter with auto-commit / rollback."""
-    raw, active_backend = _make_raw_conn()
-    conn = DBAdapter(raw, active_backend)
+    """Context manager that yields a DBAdapter with auto-commit / rollback.
+    Reuses the connection within a Flask request context for maximum performance.
+    """
+    has_flask = False
     try:
-        yield conn
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
+        from flask import has_request_context, g
+        has_flask = has_request_context()
+    except ImportError:
+        has_flask = False
+
+    if has_flask:
+        if getattr(g, "_db_adapter", None) is not None:
+            yield g._db_adapter
+            return
+
+        raw, active_backend, is_pooled = _checkout_raw_conn()
+        adapter = DBAdapter(raw, active_backend)
+        g._db_adapter = adapter
+        g._raw_db = (raw, active_backend, is_pooled)
+        try:
+            yield adapter
+        except Exception:
+            try:
+                raw.rollback()
+            except Exception:
+                pass
+            raise
+    else:
+        raw, active_backend, is_pooled = _checkout_raw_conn()
+        adapter = DBAdapter(raw, active_backend)
+        try:
+            yield adapter
+            adapter.commit()
+        except Exception:
+            adapter.rollback()
+            raise
+        finally:
+            if is_pooled and _PG_POOL:
+                try:
+                    raw.rollback()
+                    _PG_POOL.putconn(raw)
+                except Exception:
+                    try:
+                        raw.close()
+                    except Exception:
+                        pass
+            else:
+                adapter.close()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
