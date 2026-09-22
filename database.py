@@ -12,6 +12,7 @@ Both backends share the same Python API:
   - conn.executescript(sql)    : Run multiple semicolon-separated statements.
 """
 import sqlite3, os, hashlib, secrets, re
+from typing import Optional, List, Dict, Any
 from contextlib import contextmanager
 from config import DB_BACKEND, DATABASE_URL, SQLITE_PATH
 
@@ -570,6 +571,40 @@ CREATE TABLE IF NOT EXISTS inbuilt_curriculum (
     created_at       TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_curr_lookup ON inbuilt_curriculum(regulation, department, semester);
+
+-- ── Activity Audit Log ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS activity_log (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    institution_id  INTEGER NOT NULL REFERENCES institution(id) ON DELETE CASCADE,
+    department_id   INTEGER REFERENCES department(id) ON DELETE SET NULL,
+    actor_id        INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    actor_name      TEXT NOT NULL,
+    actor_role      TEXT NOT NULL,
+    action_type     TEXT NOT NULL,
+    entity_type     TEXT,
+    entity_id       INTEGER,
+    title           TEXT NOT NULL,
+    description     TEXT,
+    old_value       TEXT,
+    new_value       TEXT,
+    metadata_json   TEXT DEFAULT '{}',
+    created_at      TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_act_inst ON activity_log(institution_id, id DESC);
+
+-- ── Timetable Cell Collaborative Edit Locks ────────────────────
+CREATE TABLE IF NOT EXISTS timetable_cell_lock (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    institution_id  INTEGER NOT NULL REFERENCES institution(id) ON DELETE CASCADE,
+    slot_id         INTEGER NOT NULL,
+    locked_by_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    locked_by_name  TEXT NOT NULL,
+    locked_by_role  TEXT NOT NULL,
+    locked_at       TEXT DEFAULT (datetime('now')),
+    expires_at      TEXT NOT NULL,
+    UNIQUE(institution_id, slot_id)
+);
+CREATE INDEX IF NOT EXISTS idx_lock_slot ON timetable_cell_lock(institution_id, slot_id);
 """
 
 def generate_abbreviation(name: str, is_lab: bool = False) -> str:
@@ -605,16 +640,57 @@ _MIGRATION_SQL_SQLITE = [
     "ALTER TABLE subject ADD COLUMN abbreviation TEXT",
     "ALTER TABLE subject ADD COLUMN lab_staff2_id INTEGER REFERENCES staff(id) ON DELETE SET NULL",
     "ALTER TABLE subject ADD COLUMN is_mentor_meeting INTEGER DEFAULT 0",
+    "ALTER TABLE subject ADD COLUMN is_basic_science INTEGER DEFAULT 0",
+    "ALTER TABLE subject ADD COLUMN is_library INTEGER DEFAULT 0",
     "ALTER TABLE institution ADD COLUMN logo_url TEXT DEFAULT ''",
     "ALTER TABLE institution ADD COLUMN institution_type TEXT DEFAULT 'college'",
     "ALTER TABLE class_section ADD COLUMN venue TEXT DEFAULT ''",
     "ALTER TABLE class_section ADD COLUMN academic_year TEXT DEFAULT '2026-27'",
+    "ALTER TABLE users ADD COLUMN department_id INTEGER REFERENCES department(id) ON DELETE SET NULL",
+    "ALTER TABLE timetable ADD COLUMN department_id INTEGER REFERENCES department(id) ON DELETE SET NULL",
+    "ALTER TABLE timetable ADD COLUMN status TEXT DEFAULT 'draft'",
+    "ALTER TABLE timetable ADD COLUMN submitted_by TEXT",
+    "ALTER TABLE timetable ADD COLUMN submitted_at TEXT",
+    "ALTER TABLE timetable ADD COLUMN approved_by TEXT",
+    "ALTER TABLE timetable ADD COLUMN approved_at TEXT",
+    "ALTER TABLE timetable ADD COLUMN published_by TEXT",
+    "ALTER TABLE timetable ADD COLUMN published_at TEXT",
+    "ALTER TABLE timetable ADD COLUMN rejection_note TEXT",
+    "ALTER TABLE department ADD COLUMN category TEXT DEFAULT 'core'",
     """CREATE TABLE IF NOT EXISTS class_mentor (
         class_id      INTEGER NOT NULL REFERENCES class_section(id) ON DELETE CASCADE,
         staff_id      INTEGER NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
         mentor_order  INTEGER DEFAULT 1,
         PRIMARY KEY (class_id, staff_id)
     )""",
+    """CREATE TABLE IF NOT EXISTS activity_log (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        institution_id  INTEGER NOT NULL REFERENCES institution(id) ON DELETE CASCADE,
+        department_id   INTEGER REFERENCES department(id) ON DELETE SET NULL,
+        actor_id        INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        actor_name      TEXT NOT NULL,
+        actor_role      TEXT NOT NULL,
+        action_type     TEXT NOT NULL,
+        entity_type     TEXT,
+        entity_id       INTEGER,
+        title           TEXT NOT NULL,
+        description     TEXT,
+        old_value       TEXT,
+        new_value       TEXT,
+        metadata_json   TEXT DEFAULT '{}',
+        created_at      TEXT DEFAULT (datetime('now'))
+    )""",
+    """CREATE TABLE IF NOT EXISTS timetable_cell_lock (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        institution_id  INTEGER NOT NULL REFERENCES institution(id) ON DELETE CASCADE,
+        slot_id         INTEGER NOT NULL,
+        locked_by_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        locked_by_name  TEXT NOT NULL,
+        locked_by_role  TEXT NOT NULL,
+        locked_at       TEXT DEFAULT (datetime('now')),
+        expires_at      TEXT NOT NULL,
+        UNIQUE(institution_id, slot_id)
+    )"""
 ]
 
 # PostgreSQL migration (same intent, PostgreSQL syntax)
@@ -625,40 +701,165 @@ _MIGRATION_SQL_PG = [
     "ALTER TABLE subject ADD COLUMN IF NOT EXISTS abbreviation TEXT",
     "ALTER TABLE subject ADD COLUMN IF NOT EXISTS lab_staff2_id INTEGER REFERENCES staff(id) ON DELETE SET NULL",
     "ALTER TABLE subject ADD COLUMN IF NOT EXISTS is_mentor_meeting INTEGER DEFAULT 0",
+    "ALTER TABLE subject ADD COLUMN IF NOT EXISTS is_basic_science INTEGER DEFAULT 0",
+    "ALTER TABLE subject ADD COLUMN IF NOT EXISTS is_library INTEGER DEFAULT 0",
     "ALTER TABLE institution ADD COLUMN IF NOT EXISTS logo_url TEXT DEFAULT ''",
     "ALTER TABLE institution ADD COLUMN IF NOT EXISTS institution_type TEXT DEFAULT 'college'",
     "ALTER TABLE class_section ADD COLUMN IF NOT EXISTS venue TEXT DEFAULT ''",
     "ALTER TABLE class_section ADD COLUMN IF NOT EXISTS academic_year TEXT DEFAULT '2026-27'",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS department_id INTEGER REFERENCES department(id) ON DELETE SET NULL",
+    "ALTER TABLE timetable ADD COLUMN IF NOT EXISTS department_id INTEGER REFERENCES department(id) ON DELETE SET NULL",
+    "ALTER TABLE timetable ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'draft'",
+    "ALTER TABLE timetable ADD COLUMN IF NOT EXISTS submitted_by TEXT",
+    "ALTER TABLE timetable ADD COLUMN IF NOT EXISTS submitted_at TEXT",
+    "ALTER TABLE timetable ADD COLUMN IF NOT EXISTS approved_by TEXT",
+    "ALTER TABLE timetable ADD COLUMN IF NOT EXISTS approved_at TEXT",
+    "ALTER TABLE timetable ADD COLUMN IF NOT EXISTS published_by TEXT",
+    "ALTER TABLE timetable ADD COLUMN IF NOT EXISTS published_at TEXT",
+    "ALTER TABLE timetable ADD COLUMN IF NOT EXISTS rejection_note TEXT",
+    "ALTER TABLE department ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'core'",
     """CREATE TABLE IF NOT EXISTS class_mentor (
         class_id      INTEGER NOT NULL REFERENCES class_section(id) ON DELETE CASCADE,
         staff_id      INTEGER NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
         mentor_order  INTEGER DEFAULT 1,
         PRIMARY KEY (class_id, staff_id)
     )""",
+    """CREATE TABLE IF NOT EXISTS activity_log (
+        id              SERIAL PRIMARY KEY,
+        institution_id  INTEGER NOT NULL REFERENCES institution(id) ON DELETE CASCADE,
+        department_id   INTEGER REFERENCES department(id) ON DELETE SET NULL,
+        actor_id        INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        actor_name      TEXT NOT NULL,
+        actor_role      TEXT NOT NULL,
+        action_type     TEXT NOT NULL,
+        entity_type     TEXT,
+        entity_id       INTEGER,
+        title           TEXT NOT NULL,
+        description     TEXT,
+        old_value       TEXT,
+        new_value       TEXT,
+        metadata_json   TEXT DEFAULT '{}',
+        created_at      TIMESTAMP DEFAULT NOW()
+    )""",
+    """CREATE TABLE IF NOT EXISTS timetable_cell_lock (
+        id              SERIAL PRIMARY KEY,
+        institution_id  INTEGER NOT NULL REFERENCES institution(id) ON DELETE CASCADE,
+        slot_id         INTEGER NOT NULL,
+        locked_by_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        locked_by_name  TEXT NOT NULL,
+        locked_by_role  TEXT NOT NULL,
+        locked_at       TIMESTAMP DEFAULT NOW(),
+        expires_at      TEXT NOT NULL,
+        UNIQUE(institution_id, slot_id)
+    )"""
 ]
 
 
-def init_db():
-    """Create all tables, run migrations, ensure default abbreviations and departments exist."""
-    with get_db() as conn:
-        conn.executescript(_SCHEMA_SQL)
+_DB_INITIALIZED = False
+_DEMO_INITIALIZED = False
 
-        # Run migrations (use conn.backend to handle SQLite fallback properly)
-        migrations = _MIGRATION_SQL_PG if conn.backend == "postgres" else _MIGRATION_SQL_SQLITE
-        for stmt in migrations:
+def init_db():
+    """Create all tables, run migrations, ensure default abbreviations and departments exist.
+    Guarded against concurrent execution and redundant ALTER TABLE locks that cause deadlocks.
+    """
+    global _DB_INITIALIZED
+    if _DB_INITIALIZED:
+        return
+
+    with get_db() as conn:
+        if conn.backend == "postgres":
+            # Check if base schema exists before running heavy DDL
+            tbl_exists = False
             try:
-                conn.execute(stmt)
+                row = conn.execute(
+                    "SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='institution'"
+                ).fetchone()
+                tbl_exists = bool(row)
             except Exception:
-                pass  # Column already exists — safe to ignore
+                tbl_exists = False
+
+            if not tbl_exists:
+                conn.executescript(_SCHEMA_SQL)
+
+            # Query catalog once to skip ALTER TABLE statements for columns that already exist
+            # (Running ALTER TABLE takes an AccessExclusiveLock in Postgres, which causes deadlocks with concurrent web requests)
+            existing_cols = set()
+            try:
+                for r in conn.execute(
+                    "SELECT lower(table_name) as t, lower(column_name) as c FROM information_schema.columns WHERE table_schema='public'"
+                ).fetchall():
+                    existing_cols.add((r["t"], r["c"]))
+            except Exception:
+                pass
+
+            existing_tables = set()
+            try:
+                for r in conn.execute(
+                    "SELECT lower(table_name) as t FROM information_schema.tables WHERE table_schema='public'"
+                ).fetchall():
+                    existing_tables.add(r["t"])
+            except Exception:
+                pass
+
+            for stmt in _MIGRATION_SQL_PG:
+                s = stmt.strip()
+                s_lower = s.lower()
+                should_run = True
+
+                if s_lower.startswith("alter table"):
+                    parts = s_lower.split()
+                    if len(parts) >= 3:
+                        tbl = parts[2].strip('"')
+                        col_idx = -1
+                        for i, p in enumerate(parts):
+                            if p == "column":
+                                col_idx = i + 1
+                                break
+                        if col_idx != -1 and col_idx < len(parts):
+                            if parts[col_idx] == "if" and col_idx + 2 < len(parts) and parts[col_idx+1] == "not" and parts[col_idx+2] == "exists":
+                                col_name = parts[col_idx+3].strip('"')
+                            else:
+                                col_name = parts[col_idx].strip('"')
+                            if (tbl, col_name) in existing_cols:
+                                should_run = False
+
+                elif s_lower.startswith("create table"):
+                    parts = s_lower.split()
+                    for i, p in enumerate(parts):
+                        if p == "table":
+                            t_idx = i + 1
+                            if t_idx < len(parts):
+                                if parts[t_idx] == "if" and t_idx + 2 < len(parts) and parts[t_idx+1] == "not" and parts[t_idx+2] == "exists":
+                                    t_name = parts[t_idx+3].strip('"(')
+                                else:
+                                    t_name = parts[t_idx].strip('"(')
+                                if t_name in existing_tables:
+                                    should_run = False
+                            break
+
+                if should_run:
+                    try:
+                        conn.execute(stmt)
+                        conn.commit()
+                    except Exception:
+                        try:
+                            conn.rollback()
+                        except Exception:
+                            pass
+        else:
+            conn.executescript(_SCHEMA_SQL)
+            for stmt in _MIGRATION_SQL_SQLITE:
+                try:
+                    conn.execute(stmt)
+                except Exception:
+                    pass
 
         # Auto-fill empty abbreviations for subjects
         try:
-            rows = conn.execute("SELECT id, subject_name, is_lab, abbreviation FROM subject").fetchall()
+            rows = conn.execute("SELECT id, subject_name, is_lab, abbreviation FROM subject WHERE abbreviation IS NULL OR abbreviation=''").fetchall()
             for r in rows:
-                if not r["abbreviation"]:
-                    auto_abbr = generate_abbreviation(r["subject_name"], bool(r["is_lab"]))
-                    conn.execute("UPDATE subject SET abbreviation=? WHERE id=?", (auto_abbr, r["id"]))
-            # Auto-flag mentor meeting subjects
+                auto_abbr = generate_abbreviation(r["subject_name"], bool(r["is_lab"]))
+                conn.execute("UPDATE subject SET abbreviation=? WHERE id=?", (auto_abbr, r["id"]))
             conn.execute("UPDATE subject SET is_mentor_meeting=1 WHERE LOWER(subject_name) LIKE '%mentor%' OR UPPER(subject_code) LIKE 'MM%'")
         except Exception:
             pass
@@ -697,9 +898,10 @@ def init_db():
         except Exception:
             pass
 
-        # Seed inbuilt Anna University curricula (R2021, R2023, R2025 across all 10 departments)
+        # Seed inbuilt Anna University curricula
         seed_inbuilt_curricula_if_empty(conn)
 
+    _DB_INITIALIZED = True
     print(f"[OK] Database schema ready ({DB_BACKEND}).")
 
 
@@ -768,8 +970,12 @@ def seed_demo_institution():
     Always ensures DEMO2024 exists regardless of other institutions in the DB.
     This makes the demo account reliably available on Vercel and other deployments.
     """
+    global _DEMO_INITIALIZED
+    if _DEMO_INITIALIZED:
+        return
     with get_db() as conn:
         if conn.execute("SELECT 1 FROM institution WHERE code='DEMO2024'").fetchone():
+            _DEMO_INITIALIZED = True
             return  # Demo already seeded
 
         # Institution
@@ -1243,4 +1449,98 @@ def seed_realtime_model(institution_id: int, model_type: str = "college"):
                         conn.execute("INSERT OR IGNORE INTO class_subjects VALUES (?,?)", (cls_id, s_id))
 
     print(f"[OK] Real-time {model_type} model seeded for institution #{institution_id}.")
+
+
+def log_activity(institution_id: int, actor_name: str, actor_role: str, action_type: str,
+                 title: str, description: str = "", department_id: Optional[int] = None,
+                 actor_id: Optional[int] = None, entity_type: Optional[str] = None,
+                 entity_id: Optional[int] = None, old_value: Optional[str] = None,
+                 new_value: Optional[str] = None, metadata: Optional[dict] = None) -> int:
+    """Records an institutional activity log entry and immediately broadcasts via realtime_hub."""
+    import json, time
+    meta_str = json.dumps(metadata or {})
+    with get_db() as conn:
+        if department_id:
+            dept_exists = conn.execute("SELECT 1 FROM department WHERE id=?", (department_id,)).fetchone()
+            if not dept_exists:
+                department_id = None
+        new_id = conn.insert("""
+            INSERT INTO activity_log (
+                institution_id, department_id, actor_id, actor_name, actor_role,
+                action_type, entity_type, entity_id, title, description,
+                old_value, new_value, metadata_json
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            institution_id, department_id, actor_id, actor_name, actor_role,
+            action_type, entity_type, entity_id, title, description,
+            old_value, new_value, meta_str
+        ))
+
+    # Push to active SSE clients
+    try:
+        from realtime import realtime_hub
+        realtime_hub.publish(institution_id, "activity_logged", {
+            "id": new_id,
+            "institution_id": institution_id,
+            "department_id": department_id,
+            "actor_name": actor_name,
+            "actor_role": actor_role,
+            "action_type": action_type,
+            "title": title,
+            "description": description,
+            "time_ago": "Just now",
+            "timestamp": int(time.time())
+        })
+    except Exception:
+        pass
+    return new_id
+
+
+def get_recent_activities(institution_id: int, department_id: Optional[int] = None, limit: int = 30) -> list[dict]:
+    """Fetch recent activities, optionally filtered for a specific department (for HOD / Coordinators)."""
+    import time
+    with get_db() as conn:
+        if department_id:
+            rows = conn.execute("""
+                SELECT * FROM activity_log 
+                WHERE institution_id=? AND (department_id=? OR department_id IS NULL)
+                ORDER BY id DESC LIMIT ?
+            """, (institution_id, department_id, limit)).fetchall()
+        else:
+            rows = conn.execute("""
+                SELECT * FROM activity_log 
+                WHERE institution_id=?
+                ORDER BY id DESC LIMIT ?
+            """, (institution_id, limit)).fetchall()
+
+        results = []
+        now = time.time()
+        for r in rows:
+            d = dict(r)
+            created_str = str(d.get("created_at") or "")
+            d["time_ago"] = "Recently"
+            try:
+                import datetime
+                if isinstance(d.get("created_at"), datetime.datetime):
+                    dt = d["created_at"]
+                else:
+                    clean_ts = created_str.replace("Z", "+00:00").split(".")[0]
+                    dt = datetime.datetime.fromisoformat(clean_ts)
+                if dt.tzinfo is not None:
+                    diff_sec = int(datetime.datetime.now(datetime.timezone.utc).timestamp() - dt.timestamp())
+                else:
+                    diff_sec = int(datetime.datetime.utcnow().timestamp() - dt.timestamp())
+                diff_sec = max(0, diff_sec)
+                if diff_sec < 60:
+                    d["time_ago"] = "Just now"
+                elif diff_sec < 3600:
+                    d["time_ago"] = f"{diff_sec // 60}m ago"
+                elif diff_sec < 86400:
+                    d["time_ago"] = f"{diff_sec // 3600}h ago"
+                else:
+                    d["time_ago"] = f"{diff_sec // 86400}d ago"
+            except Exception:
+                pass
+            results.append(d)
+        return results
 

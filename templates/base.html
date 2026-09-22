@@ -50,14 +50,18 @@
           <div class="user-nm">{{ current_user.username }}</div>
           <div class="user-role">
             {% if current_user.role == 'admin' %}
-              <i class="fas fa-shield-alt me-1" style="color:var(--indigo)"></i>Admin
+              <span style="color:#818cf8;font-weight:600;"><i class="fas fa-shield-alt me-1"></i>Master Admin</span>
               <button type="button" class="btn btn-link p-0 text-decoration-none ms-1" style="font-size:10.5px;color:var(--primary-light);" onclick="openLogoModal(true)" title="Upload College Logo">
                 • Logo
               </button>
-            {% elif current_user.role == 'creator' %}
-              <i class="fas fa-magic me-1" style="color:#8b5cf6"></i>Creator
+            {% elif current_user.role == 'dean' %}
+              <span style="color:#38bdf8;font-weight:600;"><i class="fas fa-graduation-cap me-1"></i>Dean</span>
+            {% elif current_user.role == 'hod' %}
+              <span style="color:#c084fc;font-weight:600;"><i class="fas fa-user-tie me-1"></i>HOD{% if current_user.dept_code %} ({{ current_user.dept_code }}){% endif %}</span>
+            {% elif current_user.role in ('coordinator', 'creator') %}
+              <span style="color:#fbbf24;font-weight:600;"><i class="fas fa-magic me-1"></i>Coordinator{% if current_user.dept_code %} ({{ current_user.dept_code }}){% endif %}</span>
             {% else %}
-              <i class="fas fa-eye me-1" style="color:var(--text3)"></i>Viewer
+              <span style="color:var(--text3);"><i class="fas fa-eye me-1"></i>Faculty / Staff</span>
             {% endif %}
           </div>
         </div>
@@ -71,6 +75,13 @@
       <button class="sidebar-toggle" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
       <div class="topbar-title">{% block page_title %}Dashboard{% endblock %}</div>
       <div class="topbar-actions">
+        <!-- Live Campus Activity Bell -->
+        <button class="btn btn-sm btn-light position-relative me-2" onclick="toggleActivityDrawer()" id="activityBellBtn" title="⚡ Live Campus Activity Feed" style="border-radius:8px; border:1px solid var(--border); padding:6px 11px; background:#fff;">
+          <i class="fas fa-bell text-secondary" id="bellIcon"></i>
+          <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="activityUnreadBadge" style="display:none; font-size:9px; padding:3px 5px;">
+            0
+          </span>
+        </button>
         <button class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1 me-2" onclick="startInteractiveTour(true)" style="font-size:12px;border-radius:6px;background:rgba(99,102,241,0.06);border-color:rgba(99,102,241,0.3);color:var(--primary);" title="Launch Interactive Campus Tour">
           <i class="fas fa-compass"></i> Guide Tour
         </button>
@@ -79,7 +90,7 @@
             <i class="fas fa-cloud-arrow-up"></i> College Logo
           </button>
         {% endif %}
-        {% if current_user.role in ('admin', 'creator') %}
+        {% if current_user.role in ('admin', 'creator', 'coordinator', 'hod') %}
           {% block topbar_actions %}{% endblock %}
         {% endif %}
       </div>
@@ -389,7 +400,202 @@ async function removeCollegeLogo() {
     alert('Error removing logo.');
   }
 }
+
+// ═════════════════ REAL-TIME SSE & LIVE ACTIVITY DRAWER ═════════════════
+let activityDrawerInst = null;
+let unreadActivityCount = 0;
+let realtimeSource = null;
+
+function toggleActivityDrawer() {
+  const drawerEl = document.getElementById('activityDrawer');
+  if (!drawerEl) return;
+  if (!activityDrawerInst && window.bootstrap) {
+    activityDrawerInst = new bootstrap.Offcanvas(drawerEl);
+  }
+  if (activityDrawerInst) {
+    activityDrawerInst.toggle();
+  }
+  // Clear unread badge
+  unreadActivityCount = 0;
+  const badge = document.getElementById('activityUnreadBadge');
+  if (badge) {
+    badge.style.display = 'none';
+    badge.textContent = '0';
+  }
+  loadActivityFeed();
+}
+
+function renderActivityCardHtml(act, isNew = false) {
+  let iconClass = 'fa-info-circle text-primary';
+  let bgClass = 'rgba(59,130,246,0.1)';
+  const at = (act.action_type || '').toUpperCase();
+  if (at.includes('SUBMIT')) {
+    iconClass = 'fa-paper-plane text-info'; bgClass = 'rgba(14,165,233,0.12)';
+  } else if (at.includes('APPROVE')) {
+    iconClass = 'fa-check-double text-purple'; bgClass = 'rgba(168,85,247,0.12)';
+  } else if (at.includes('PUBLISH')) {
+    iconClass = 'fa-bullhorn text-success'; bgClass = 'rgba(16,185,129,0.12)';
+  } else if (at.includes('REJECT')) {
+    iconClass = 'fa-undo text-danger'; bgClass = 'rgba(239,68,68,0.12)';
+  } else if (at.includes('LOCK')) {
+    iconClass = 'fa-lock text-warning'; bgClass = 'rgba(245,158,11,0.12)';
+  } else if (at.includes('SLOT') || at.includes('SWAP')) {
+    iconClass = 'fa-exchange-alt text-indigo'; bgClass = 'rgba(99,102,241,0.12)';
+  } else if (at.includes('USER')) {
+    iconClass = 'fa-user-plus text-primary'; bgClass = 'rgba(59,130,246,0.12)';
+  }
+
+  const rolePill = act.actor_role ? `<span class="badge bg-light text-dark border" style="font-size:9.5px; padding:2px 6px;">${act.actor_role.toUpperCase()}</span>` : '';
+  const glowClass = isNew ? 'new-pulse' : '';
+
+  return `
+    <div class="activity-card ${glowClass}" data-id="${act.id || ''}">
+      <div class="d-flex align-items-start gap-2">
+        <div class="activity-icon" style="background:${bgClass};">
+          <i class="fas ${iconClass}"></i>
+        </div>
+        <div class="flex-grow-1 min-w-0">
+          <div class="d-flex align-items-center justify-content-between gap-1 mb-1">
+            <strong style="font-size:12px; color:var(--text);">${escapeHtml(act.title || 'Campus Event')}</strong>
+            <span class="text-muted" style="font-size:10px;">${act.time_ago || 'Just now'}</span>
+          </div>
+          <p class="mb-1 text-muted" style="font-size:11.5px; line-height:1.35;">${escapeHtml(act.description || '')}</p>
+          <div class="d-flex align-items-center gap-1 mt-1">
+            ${rolePill}
+            <span class="text-secondary" style="font-size:10px;"><i class="fas fa-user me-1"></i>${escapeHtml(act.actor_name || 'System')}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function escapeHtml(text) {
+  if (!text) return '';
+  return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+async function loadActivityFeed(manual = false) {
+  const container = document.getElementById('drawerActivityList');
+  if (!container) return;
+  if (manual) {
+    container.innerHTML = '<div class="text-center py-4 text-muted small"><i class="fas fa-spinner fa-spin me-1"></i> Refreshing...</div>';
+  }
+  try {
+    const res = await fetch('/api/activity/feed');
+    if (!res.ok) return;
+    const list = await res.json();
+    if (!list || list.length === 0) {
+      container.innerHTML = '<div class="text-center py-5 text-muted small"><i class="fas fa-history fa-2x mb-2 d-block opacity-25"></i>No activity recorded yet.</div>';
+      return;
+    }
+    container.innerHTML = list.map(item => renderActivityCardHtml(item)).join('');
+  } catch (err) {
+    console.error('[ACTIVITY FEED]', err);
+    if (manual) {
+      container.innerHTML = '<div class="text-center py-4 text-danger small">Failed to load activity feed.</div>';
+    }
+  }
+}
+
+function initRealtimeSSE() {
+  if (typeof EventSource === 'undefined') return;
+  if (realtimeSource) {
+    try { realtimeSource.close(); } catch(e){}
+  }
+
+  realtimeSource = new EventSource('/api/realtime/stream');
+
+  realtimeSource.addEventListener('connected', (e) => {
+    console.log('[SSE Realtime Hub] Connected successfully.');
+  });
+
+  realtimeSource.addEventListener('activity_logged', (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      unreadActivityCount++;
+      const badge = document.getElementById('activityUnreadBadge');
+      if (badge) {
+        badge.textContent = unreadActivityCount > 9 ? '9+' : unreadActivityCount;
+        badge.style.display = 'inline-block';
+      }
+
+      // Prepend to drawer if list exists
+      const drawerList = document.getElementById('drawerActivityList');
+      if (drawerList) {
+        // If empty message is showing, clear it
+        if (drawerList.querySelector('.text-center')) {
+          drawerList.innerHTML = '';
+        }
+        drawerList.insertAdjacentHTML('afterbegin', renderActivityCardHtml(data, true));
+      }
+
+      // Prepend to dashboard feed if present
+      const dashList = document.getElementById('dashboardActivityFeed');
+      if (dashList) {
+        if (dashList.querySelector('.text-center')) {
+          dashList.innerHTML = '';
+        }
+        dashList.insertAdjacentHTML('afterbegin', renderActivityCardHtml(data, true));
+      }
+    } catch(err) {
+      console.error('[SSE activity_logged]', err);
+    }
+  });
+
+  // Relay grid collaboration events to active window listeners
+  const relayEvents = ['slot_updated', 'slot_locked', 'slot_unlocked', 'timetable_status_changed', 'timetable_generated', 'timetable_deleted'];
+  relayEvents.forEach(evtName => {
+    realtimeSource.addEventListener(evtName, (e) => {
+      try {
+        const payload = JSON.parse(e.data);
+        window.dispatchEvent(new CustomEvent('schedhub:' + evtName, { detail: payload }));
+      } catch (err) {
+        window.dispatchEvent(new CustomEvent('schedhub:' + evtName, { detail: e.data }));
+      }
+    });
+  });
+
+  realtimeSource.onerror = (err) => {
+    console.warn('[SSE Realtime Hub] Connection interrupted, retrying in 5s...');
+    try { realtimeSource.close(); } catch(e){}
+    setTimeout(initRealtimeSSE, 5000);
+  };
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initRealtimeSSE();
+});
 </script>
+
+<!-- ═════════════════ SLIDE-OVER CAMPUS AUDIT & ACTIVITY DRAWER ═════════════════ -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="activityDrawer" aria-labelledby="activityDrawerLabel" style="width:380px; z-index:1060; border-left:1px solid var(--border); box-shadow: -8px 0 24px rgba(0,0,0,0.08);">
+  <div class="offcanvas-header py-3 px-4" style="background:linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); color:#fff;">
+    <div>
+      <h6 class="offcanvas-title d-flex align-items-center gap-2 mb-1" id="activityDrawerLabel" style="font-family:'Syne',sans-serif; font-weight:700;">
+        <i class="fas fa-bolt text-warning"></i> Campus Activity Audit
+      </h6>
+      <div class="d-flex align-items-center gap-1" style="font-size:11px; color:#cbd5e1;">
+        <span class="spinner-grow spinner-grow-sm text-success" style="width:7px; height:7px;" role="status"></span>
+        <span>Real-time Live Sync Active</span>
+      </div>
+    </div>
+    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+  </div>
+  <div class="offcanvas-body p-0 d-flex flex-column" style="background:var(--bg-main);">
+    <div class="p-2 border-bottom d-flex justify-content-between align-items-center bg-white">
+      <span class="text-muted small fw-600 px-2" style="font-size:11.5px;">Live Institutional Log</span>
+      <button class="btn btn-sm btn-link text-decoration-none py-0 px-2" style="font-size:11px;" onclick="loadActivityFeed(true)">
+        <i class="fas fa-sync-alt me-1"></i>Refresh
+      </button>
+    </div>
+    <div class="flex-grow-1 overflow-auto p-3" id="drawerActivityList" style="max-height: calc(100vh - 120px);">
+      <div class="text-center py-5 text-muted small">
+        <i class="fas fa-spinner fa-spin me-1"></i> Loading live activity feed...
+      </div>
+    </div>
+  </div>
+</div>
 
 {% block scripts %}{% endblock %}
 

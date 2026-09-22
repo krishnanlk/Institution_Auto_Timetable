@@ -493,3 +493,109 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
     padding: 4px 6px !important;
   }
 }
+
+/* ── Live Collaborative Sync & Presence Styles ───────────────────────────── */
+@keyframes cellGlow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.8);
+    transform: scale(1.02);
+    border-color: #6366f1 !important;
+  }
+  50% {
+    box-shadow: 0 0 16px 4px rgba(99, 102, 241, 0.5);
+    background-color: #ede9fe !important;
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
+    transform: scale(1);
+  }
+}
+
+.cell-glow {
+  animation: cellGlow 1.8s ease-out forwards;
+}
+
+.slot-card.cell-locked {
+  border: 1.5px dashed #f59e0b !important;
+  background: #fffbeb !important;
+  position: relative;
+  user-select: none;
+}
+
+.slot-lock-indicator {
+  position: absolute;
+  top: -8px;
+  right: -6px;
+  background: #f59e0b;
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  z-index: 10;
+}
+
+/* ── Workflow Status Banner ────────────────────────────────────────────────── */
+.workflow-banner {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 14px 18px;
+  box-shadow: var(--sh-sm);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.wf-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.wf-draft { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+.wf-submitted { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+.wf-approved { background: #f3e8ff; color: #7e22ce; border: 1px solid #e9d5ff; }
+.wf-published { background: #d1fae5; color: #047857; border: 1px solid #a7f3d0; }
+
+/* ── Live Activity Audit Feed Card ────────────────────────────────────────── */
+.activity-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  transition: all 0.2s ease;
+  position: relative;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.activity-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+  border-color: #cbd5e1;
+}
+.activity-card.new-pulse {
+  animation: cellGlow 1.5s ease-out;
+}
+.activity-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+

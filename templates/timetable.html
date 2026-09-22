@@ -42,6 +42,65 @@
 <!-- Validation panel -->
 <div id="validationPanel"></div>
 
+<!-- Timetable Approval & Publishing Workflow Banner -->
+{% if active_timetable %}
+<div class="workflow-banner" id="workflowBanner" data-tt-id="{{ active_timetable.id }}">
+  <div class="d-flex align-items-center gap-3 flex-wrap">
+    <div class="d-flex align-items-center gap-2">
+      <span class="text-muted small fw-600" style="font-size:12px;">Workflow Status:</span>
+      {% set st = active_timetable.status or 'draft' %}
+      {% if st == 'published' %}
+        <span class="wf-status-pill wf-published" id="wfPill"><i class="fas fa-bullhorn me-1"></i>Published & Official</span>
+      {% elif st == 'approved' %}
+        <span class="wf-status-pill wf-approved" id="wfPill"><i class="fas fa-check-double me-1"></i>Approved by HOD</span>
+      {% elif st == 'submitted' %}
+        <span class="wf-status-pill wf-submitted" id="wfPill"><i class="fas fa-hourglass-half me-1"></i>Under HOD Review</span>
+      {% else %}
+        <span class="wf-status-pill wf-draft" id="wfPill"><i class="fas fa-pencil-alt me-1"></i>Draft Preparation</span>
+      {% endif %}
+    </div>
+
+    <div class="text-muted small" id="wfDetails" style="font-size:11.5px;">
+      {% if st == 'published' and active_timetable.published_by %}
+        <span>Published by <strong>{{ active_timetable.published_by }}</strong>{% if active_timetable.published_at %} on {{ active_timetable.published_at[:16] }}{% endif %}</span>
+      {% elif st == 'approved' and active_timetable.approved_by %}
+        <span>Approved by HOD <strong>{{ active_timetable.approved_by }}</strong>{% if active_timetable.approved_at %} on {{ active_timetable.approved_at[:16] }}{% endif %} — Ready for institution-wide release</span>
+      {% elif st == 'submitted' and active_timetable.submitted_by %}
+        <span>Submitted by <strong>{{ active_timetable.submitted_by }}</strong>{% if active_timetable.submitted_at %} on {{ active_timetable.submitted_at[:16] }}{% endif %}</span>
+      {% else %}
+        <span>Editable by Timetable Coordinators. Zero clash validation required before submission.</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="d-flex align-items-center gap-2 flex-wrap ms-auto" id="wfActions">
+    {% if st == 'draft' and current_user.role in ('admin', 'creator', 'coordinator') %}
+      <button class="btn btn-sm btn-primary py-1 px-3 d-flex align-items-center gap-1" style="font-size:12px; font-weight:600;" onclick="submitTimetableReview()">
+        <i class="fas fa-paper-plane"></i> Submit to HOD
+      </button>
+    {% elif st == 'submitted' and current_user.role in ('admin', 'hod') %}
+      <button class="btn btn-sm btn-outline-danger py-1 px-2 d-flex align-items-center gap-1" style="font-size:12px;" onclick="rejectTimetableReview()">
+        <i class="fas fa-undo"></i> Request Revisions
+      </button>
+      <button class="btn btn-sm btn-success py-1 px-3 d-flex align-items-center gap-1" style="font-size:12px; font-weight:600;" onclick="approveTimetableReview()">
+        <i class="fas fa-check-double"></i> Approve Timetable
+      </button>
+    {% elif st == 'approved' and current_user.role in ('admin', 'hod') %}
+      <button class="btn btn-sm btn-success py-1 px-3 d-flex align-items-center gap-1" style="font-size:12px; font-weight:600;" onclick="publishTimetableOfficial()">
+        <i class="fas fa-bullhorn"></i> Publish to Campus
+      </button>
+    {% endif %}
+  </div>
+</div>
+
+{% if active_timetable.rejection_note and (active_timetable.status or 'draft') == 'draft' %}
+<div class="alert alert-warning py-2 px-3 mb-3 d-flex align-items-center gap-2" style="font-size:12.5px; border-radius:10px;">
+  <i class="fas fa-exclamation-circle text-warning"></i>
+  <div><strong>HOD Revision Note:</strong> {{ active_timetable.rejection_note }}</div>
+</div>
+{% endif %}
+{% endif %}
+
 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
   <!-- View toggle -->
   <div class="view-toggle mb-0">
@@ -221,7 +280,10 @@
   "periodSlots": {{ period_slots | tojson }},
   "classes": {{ classes | tojson }},
   "staff": {{ staff_list | tojson }},
-  "isAdmin": {{ (current_user.role in ('admin', 'creator')) | tojson }},
+  "isAdmin": {{ (current_user.role in ('admin', 'creator', 'coordinator')) | tojson }},
+  "userRole": {{ (current_user.role if current_user else 'viewer') | tojson }},
+  "userId": {{ (current_user.id if current_user else 0) | tojson }},
+  "username": {{ (current_user.username if current_user else '') | tojson }},
   "activeTtId": {{ (active_timetable.id if active_timetable else None) | tojson }}
 }
 </script>
@@ -238,7 +300,12 @@ const PERIOD_SLOTS = _ttData.periodSlots || [];
 const CLASSES = _ttData.classes || [];
 const STAFF   = _ttData.staff || [];
 const IS_ADMIN = Boolean(_ttData.isAdmin);
+const USER_ROLE = _ttData.userRole || 'viewer';
+const CURRENT_USER_ID = _ttData.userId || 0;
+const CURRENT_USERNAME = _ttData.username || '';
+const IS_MASTER_ADMIN = USER_ROLE === 'admin';
 const ACTIVE_TT_ID = _ttData.activeTtId || null;
+let activeLocks = {};
 
 // ── dept colour map ────────────────────────────────────────────────────────
 const DEPT_COLORS = {
@@ -364,7 +431,16 @@ function renderGrid(containerId, ttId, grid, days, periodSlots, viewType) {
         const color = deptColor(cell.department || '');
         const isLab = cell.is_lab;
         const edited = cell.is_manual_edit ? ' edited-badge' : '';
-        const dragAttrs = IS_ADMIN
+        const cellLock = activeLocks[cell.slot_id];
+        const isLockedByOther = cellLock && cellLock.user_id !== CURRENT_USER_ID;
+        const lockClass = cellLock ? ' cell-locked' : '';
+        const lockBadge = cellLock
+          ? `<div class="slot-lock-indicator" title="Locked by ${escapeHtml(cellLock.username)} (${escapeHtml(cellLock.role)})">
+               <i class="fas fa-lock"></i> ${escapeHtml(cellLock.username)}
+             </div>`
+          : '';
+        const canDrag = IS_ADMIN && !isLockedByOther;
+        const dragAttrs = canDrag
           ? `draggable="true"
              ondragstart="onDragStart(event,${cell.slot_id},'${day}',${order})"`
           : '';
@@ -377,15 +453,16 @@ function renderGrid(containerId, ttId, grid, days, periodSlots, viewType) {
           }
         }
 
-        html += `<div class="slot-card${edited}${isMerged ? ' slot-card-merged-h' : ''}"
+        html += `<div class="slot-card${edited}${isMerged ? ' slot-card-merged-h' : ''}${lockClass}"
                       style="--card-color:${color}"
                       data-slot-id="${cell.slot_id}"
                       ${dragAttrs}>
+          ${lockBadge}
           <div class="slot-card-top">
             ${isLab ? `<span class="lab-badge">🔬 LAB</span>` : ''}
             ${isMerged ? `<span class="merge-badge" title="${colspan} consecutive periods">⟵ ${colspan}P ⟶</span>` : ''}
             ${cell.is_manual_edit ? `<span class="edit-badge" title="Manually edited">✎</span>` : ''}
-            ${IS_ADMIN ? `<button class="slot-edit-btn ms-auto" onclick="openSlotEdit(${cell.slot_id},'${cell.subject_name.replace(/'/g, "\\'")}','${day}',${order})" title="Edit staff">
+            ${IS_ADMIN ? `<button class="slot-edit-btn ms-auto" onclick="handleSlotEditClick(${cell.slot_id},'${cell.subject_name.replace(/'/g, "\\'")}','${day}',${order})" title="Edit staff">
               <i class="fas fa-pen"></i>
             </button>` : ''}
           </div>
@@ -414,7 +491,7 @@ function renderGrid(containerId, ttId, grid, days, periodSlots, viewType) {
 let currentClassId  = null;
 let currentTTId     = null;
 
-async function loadClassTT() {
+async function loadClassTT(showLoading = true) {
   const classId = document.getElementById('classSelect').value;
   if (!classId) {
     document.getElementById('classTTDiv').innerHTML = '';
@@ -422,26 +499,51 @@ async function loadClassTT() {
     return;
   }
   currentClassId = classId;
-  document.getElementById('classTTDiv').innerHTML = '<div class="loading-grid"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+  if (showLoading) {
+    document.getElementById('classTTDiv').innerHTML = '<div class="loading-grid"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+  }
 
-  const res  = await fetch(`/api/timetable/class/${classId}`);
-  const data = await res.json();
-  currentTTId = data.timetable_id;
+  try {
+    const [res, lockRes] = await Promise.all([
+      fetch(`/api/timetable/class/${classId}`),
+      fetch('/api/timetable/locks')
+    ]);
+    const data = await res.json();
+    if (lockRes.ok) {
+      activeLocks = await lockRes.json();
+    }
+    currentTTId = data.timetable_id;
 
-  renderGrid('classTTDiv', data.timetable_id, data.grid, data.days, data.period_slots, 'class');
-  document.getElementById('exportBtns').style.display = data.timetable_id ? 'flex' : 'none';
+    renderGrid('classTTDiv', data.timetable_id, data.grid, data.days, data.period_slots, 'class');
+    document.getElementById('exportBtns').style.display = data.timetable_id ? 'flex' : 'none';
+  } catch (err) {
+    console.error('Error loading class timetable:', err);
+  }
 }
 
-async function loadStaffTT() {
+async function loadStaffTT(showLoading = true) {
   const staffId = document.getElementById('staffSelect').value;
   if (!staffId) {
     document.getElementById('staffTTDiv').innerHTML = '';
     return;
   }
-  document.getElementById('staffTTDiv').innerHTML = '<div class="loading-grid"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
-  const res  = await fetch(`/api/timetable/staff/${staffId}`);
-  const data = await res.json();
-  renderGrid('staffTTDiv', data.timetable_id, data.grid, data.days, data.period_slots, 'staff');
+  if (showLoading) {
+    document.getElementById('staffTTDiv').innerHTML = '<div class="loading-grid"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+  }
+
+  try {
+    const [res, lockRes] = await Promise.all([
+      fetch(`/api/timetable/staff/${staffId}`),
+      fetch('/api/timetable/locks')
+    ]);
+    const data = await res.json();
+    if (lockRes.ok) {
+      activeLocks = await lockRes.json();
+    }
+    renderGrid('staffTTDiv', data.timetable_id, data.grid, data.days, data.period_slots, 'staff');
+  } catch (err) {
+    console.error('Error loading staff timetable:', err);
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -452,7 +554,27 @@ let dragFromDay  = null;
 let dragFromPer  = null;
 let checkTimer   = null;
 
-function onDragStart(evt, slotId, day, period) {
+async function onDragStart(evt, slotId, day, period) {
+  const cellLock = activeLocks[slotId];
+  if (cellLock && cellLock.user_id !== CURRENT_USER_ID) {
+    evt.preventDefault();
+    if (IS_MASTER_ADMIN) {
+      if (confirm(`Slot is currently being edited by ${cellLock.username} (${cellLock.role}). Emergency Override as Master Admin?`)) {
+        const ovRes = await fetch(`/api/timetable/slot/${slotId}/override-lock`, { method: 'POST' });
+        const ovData = await ovRes.json();
+        if (ovData.success) {
+          activeLocks[slotId] = ovData.lock;
+        }
+      } else {
+        return;
+      }
+    } else {
+      showToast('warning', 'Slot Locked', `Slot is currently locked by ${cellLock.username}.`);
+      return;
+    }
+  }
+
+  fetch(`/api/timetable/slot/${slotId}/lock`, { method: 'POST' });
   dragSlotId  = slotId;
   dragFromDay = day;
   dragFromPer = period;
@@ -514,9 +636,14 @@ async function onDrop(evt, day, period) {
   data = await res.json();
   if (data.success) {
     showToast('success', 'Slot Updated', data.message || 'Slot moved successfully');
-    loadClassTT();  // Reload grid
+    loadClassTT(false);  // Reload grid without full loading spinner
   } else {
     showToast('danger', 'Conflict', data.message || 'Cannot move slot');
+  }
+
+  // Release lock
+  if (dragSlotId) {
+    fetch(`/api/timetable/slot/${dragSlotId}/unlock`, { method: 'POST' });
   }
 
   // Reset drag state
@@ -525,6 +652,9 @@ async function onDrop(evt, day, period) {
 }
 
 document.addEventListener('dragend', () => {
+  if (dragSlotId) {
+    fetch(`/api/timetable/slot/${dragSlotId}/unlock`, { method: 'POST' });
+  }
   document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
   document.querySelectorAll('.conflict-target,.valid-target').forEach(el =>
     el.classList.remove('conflict-target', 'valid-target')
@@ -535,6 +665,41 @@ document.addEventListener('dragend', () => {
 // Edit slot staff
 // ══════════════════════════════════════════════════════════════════════════
 let editingSlotId = null;
+
+async function handleSlotEditClick(slotId, subjectName, day, period) {
+  const cellLock = activeLocks[slotId];
+  if (cellLock && cellLock.user_id !== CURRENT_USER_ID) {
+    if (IS_MASTER_ADMIN) {
+      if (confirm(`Slot is currently being edited by ${cellLock.username} (${cellLock.role}). Master Admin Emergency Override?`)) {
+        const ovRes = await fetch(`/api/timetable/slot/${slotId}/override-lock`, { method: 'POST' });
+        const ovData = await ovRes.json();
+        if (ovData.success) {
+          activeLocks[slotId] = ovData.lock;
+          openSlotEdit(slotId, subjectName, day, period);
+        } else {
+          showToast('danger', 'Override Error', 'Failed to override lock');
+        }
+      }
+      return;
+    } else {
+      showToast('warning', 'Slot In Use', `This slot is currently being edited by ${cellLock.username} (${cellLock.role}). Please wait.`);
+      return;
+    }
+  }
+
+  // Try to acquire lock
+  try {
+    const lRes = await fetch(`/api/timetable/slot/${slotId}/lock`, { method: 'POST' });
+    const lData = await lRes.json();
+    if (!lData.success) {
+      showToast('warning', 'Slot In Use', lData.error || 'Slot is currently locked.');
+      return;
+    }
+    activeLocks[slotId] = lData.lock;
+  } catch(e) {}
+
+  openSlotEdit(slotId, subjectName, day, period);
+}
 
 async function openSlotEdit(slotId, subjectName, day, period) {
   editingSlotId = slotId;
@@ -787,6 +952,164 @@ function filterByDept(deptCode, btnEl) {
     loadStaffTT();
   }
 }
+
+// ══════════════════════════════════════════════════════════════════════════
+// Timetable Approval & Publishing Workflow Actions
+// ══════════════════════════════════════════════════════════════════════════
+async function submitTimetableReview(ttId) {
+  ttId = ttId || ACTIVE_TT_ID;
+  if (!ttId) { showToast('warning', 'Notice', 'No active timetable found'); return; }
+  if (!confirm('Submit this timetable for formal review by the Head of Department (HOD)?')) return;
+  try {
+    const res = await fetch(`/api/timetable/${ttId}/submit`, { method: 'POST' });
+    const d = await res.json();
+    if (d.success) {
+      showToast('success', 'Submitted', d.message || 'Timetable submitted to HOD!');
+      setTimeout(() => location.reload(), 600);
+    } else {
+      showToast('danger', 'Error', d.error || d.message || 'Failed to submit timetable');
+    }
+  } catch(e) {
+    showToast('danger', 'Network Error', 'Failed to connect to server');
+  }
+}
+
+async function approveTimetableReview(ttId) {
+  ttId = ttId || ACTIVE_TT_ID;
+  if (!ttId) { showToast('warning', 'Notice', 'No active timetable found'); return; }
+  if (!confirm('Approve this timetable? It will be marked ready for institution-wide release.')) return;
+  try {
+    const res = await fetch(`/api/timetable/${ttId}/approve`, { method: 'POST' });
+    const d = await res.json();
+    if (d.success) {
+      showToast('success', 'Approved', d.message || 'Timetable approved successfully!');
+      setTimeout(() => location.reload(), 600);
+    } else {
+      showToast('danger', 'Error', d.error || d.message || 'Failed to approve timetable');
+    }
+  } catch(e) {
+    showToast('danger', 'Network Error', 'Failed to connect to server');
+  }
+}
+
+async function rejectTimetableReview(ttId) {
+  ttId = ttId || ACTIVE_TT_ID;
+  if (!ttId) { showToast('warning', 'Notice', 'No active timetable found'); return; }
+  const reason = prompt('Enter revision notes or requested changes for the coordinator:');
+  if (reason === null) return;
+  try {
+    const res = await fetch(`/api/timetable/${ttId}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason })
+    });
+    const d = await res.json();
+    if (d.success) {
+      showToast('warning', 'Returned', 'Timetable returned to Coordinator with feedback.');
+      setTimeout(() => location.reload(), 600);
+    } else {
+      showToast('danger', 'Error', d.error || d.message || 'Failed to return timetable');
+    }
+  } catch(e) {
+    showToast('danger', 'Network Error', 'Failed to connect to server');
+  }
+}
+
+async function publishTimetableOfficial(ttId) {
+  ttId = ttId || ACTIVE_TT_ID;
+  if (!ttId) { showToast('warning', 'Notice', 'No active timetable found'); return; }
+  if (!confirm('Officially publish this timetable? This will make it the live active schedule across the entire campus.')) return;
+  try {
+    const res = await fetch(`/api/timetable/${ttId}/publish`, { method: 'POST' });
+    const d = await res.json();
+    if (d.success) {
+      showToast('success', 'Published', d.message || 'Timetable published institution-wide!');
+      setTimeout(() => location.reload(), 600);
+    } else {
+      showToast('danger', 'Error', d.error || d.message || 'Failed to publish timetable');
+    }
+  } catch(e) {
+    showToast('danger', 'Network Error', 'Failed to connect to server');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Collaborative Real-Time Event Handlers
+// ══════════════════════════════════════════════════════════════════════════
+window.addEventListener('schedhub:slot_updated', (e) => {
+  const detail = e.detail;
+  if (currentClassId) {
+    loadClassTT(false).then(() => {
+      // Glow highlight on modified slot
+      if (detail && detail.slot_id) {
+        const el = document.querySelector(`[data-slot-id="${detail.slot_id}"]`);
+        if (el) {
+          el.classList.add('cell-glow');
+          setTimeout(() => el.classList.remove('cell-glow'), 2200);
+        }
+      }
+    });
+  } else if (document.getElementById('staffSelect') && document.getElementById('staffSelect').value) {
+    loadStaffTT(false);
+  }
+});
+
+window.addEventListener('schedhub:slot_locked', (e) => {
+  const info = e.detail;
+  if (info && info.slot_id) {
+    activeLocks[info.slot_id] = info;
+    const card = document.querySelector(`[data-slot-id="${info.slot_id}"]`);
+    if (card) {
+      card.classList.add('cell-locked');
+      let ind = card.querySelector('.slot-lock-indicator');
+      if (!ind) {
+        card.insertAdjacentHTML('afterbegin', `<div class="slot-lock-indicator" title="Locked by ${escapeHtml(info.username)}"><i class="fas fa-lock"></i> ${escapeHtml(info.username)}</div>`);
+      }
+    }
+  }
+});
+
+window.addEventListener('schedhub:slot_unlocked', (e) => {
+  const info = e.detail;
+  if (info && info.slot_id) {
+    delete activeLocks[info.slot_id];
+    const card = document.querySelector(`[data-slot-id="${info.slot_id}"]`);
+    if (card) {
+      card.classList.remove('cell-locked');
+      const ind = card.querySelector('.slot-lock-indicator');
+      if (ind) ind.remove();
+    }
+  }
+});
+
+window.addEventListener('schedhub:timetable_status_changed', (e) => {
+  showToast('info', 'Status Updated', 'Timetable state changed to: ' + (e.detail.status || '').toUpperCase());
+  setTimeout(() => location.reload(), 700);
+});
+
+window.addEventListener('schedhub:timetable_generated', (e) => {
+  showToast('info', 'New Timetable', 'A new timetable has been generated.');
+  setTimeout(() => location.reload(), 700);
+});
+
+window.addEventListener('schedhub:timetable_deleted', (e) => {
+  showToast('warning', 'Timetable Reset', 'The active timetable has been cleared.');
+  setTimeout(() => location.reload(), 700);
+});
+
+// Clean up locks when modal closes
+document.addEventListener('DOMContentLoaded', () => {
+  const modalEl = document.getElementById('editSlotModal');
+  if (modalEl) {
+    modalEl.addEventListener('hidden.bs.modal', () => {
+      if (editingSlotId) {
+        fetch(`/api/timetable/slot/${editingSlotId}/unlock`, { method: 'POST' });
+        delete activeLocks[editingSlotId];
+        editingSlotId = null;
+      }
+    });
+  }
+});
 
 // ══════════════════════════════════════════════════════════════════════════
 // Init: auto-load first class if timetable exists

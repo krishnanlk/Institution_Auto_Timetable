@@ -405,12 +405,50 @@ def generate_timetable_iter(institution_id: int, name: str = "Auto Generated") -
                         for _ in range(s["periods_per_week"]):
                             all_lectures.append((cls["id"], cls["name"], dict(s)))
 
+            # ── Department categories lookup for Academic Pipeline ───────────
+            dept_rows = conn.execute("SELECT name, code, category FROM department WHERE institution_id=?", (institution_id,)).fetchall()
+            dept_cat_map = {}
+            for dr in dept_rows:
+                dept_cat_map[dr["name"].lower()] = dr["category"]
+                dept_cat_map[dr["code"].lower()] = dr["category"]
+
+            def _is_bs(s):
+                if s.get("is_basic_science"):
+                    return True
+                d = (s.get("department") or "").strip().lower()
+                if dept_cat_map.get(d) == "basic_science":
+                    return True
+                return d in ("s&h", "basic science", "basic sciences", "math", "mathematics", "physics", "chemistry", "english", "pe", "sports", "lang")
+
+            def _is_mm(s):
+                return bool(s.get("is_mentor_meeting")) or "mentor" in s.get("subject_name", "").lower() or s.get("subject_code", "").upper().startswith("MM")
+
+            def _is_lib(s):
+                return bool(s.get("is_library")) or "library" in s.get("subject_name", "").lower() or s.get("subject_code", "").upper().startswith("LIB")
+
+            # Step 1 & 2: Basic Science Labs placed before Core Department Labs
+            all_labs.sort(key=lambda item: (0 if _is_bs(item[2]) else 1, -item[2]["periods_per_week"]))
+
+            # Step 1, 3, 4, 5: BS Theory -> Core Theory -> Mentor Meetings -> Library Hours
+            def _lec_stage(item):
+                s = item[2]
+                if _is_bs(s):
+                    return (0, -s["periods_per_week"], -s["difficulty_level"])
+                elif _is_mm(s):
+                    return (3, 0, 0)
+                elif _is_lib(s):
+                    return (4, 0, 0)
+                else:
+                    return (1, -s["periods_per_week"], -s["difficulty_level"])
+
+            all_lectures.sort(key=_lec_stage)
+
             total_labs = sum(r for _, _, _, r, _ in all_labs)
             total_lecs = len(all_lectures)
 
             yield {
                 "pct": 12,
-                "msg": f"Found {total_labs} lab sessions, {total_lecs} lecture periods. Placing labs first…"
+                "msg": f"Pipeline Initialized: Step 1 (Basic Science) & Step 2 (Core Labs) ({total_labs} lab sessions)…"
             }
 
             # ── Load per-class mentor assignments ──────────────────────────
@@ -428,9 +466,7 @@ def generate_timetable_iter(institution_id: int, name: str = "Auto Generated") -
             run_rng = random.Random(int(_time_mod.time() * 1000))
 
             # ══════════════════════════════════════════════════════════════
-            # PHASE 1: Place lab subjects (consecutive slots required)
-            # Labs use dual-staff: both primary + secondary (lab_staff2_id) must be free.
-            # Slot position is truly random (shuffled per run).
+            # STEP 1 & 2: Place Basic Science & Core Department Laboratories
             # ══════════════════════════════════════════════════════════════
             labs_placed = 0
 
@@ -1598,6 +1634,122 @@ def delete_timetable(institution_id: int) -> None:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Timetable Workflow & Approval Engine (Coordinator -> HOD -> Master Admin)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def submit_timetable(timetable_id: int, institution_id: int, actor_name: str, actor_role: str) -> tuple[bool, str]:
+    """Coordinator submits the draft timetable to HOD for formal review."""
+    import datetime
+    from database import log_activity
+    with get_db() as conn:
+        tt = conn.execute("SELECT * FROM timetable WHERE id=? AND institution_id=?", (timetable_id, institution_id)).fetchone()
+        if not tt:
+            return False, "Timetable not found"
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        conn.execute("""
+            UPDATE timetable 
+            SET status='submitted', submitted_by=?, submitted_at=?
+            WHERE id=? AND institution_id=?
+        """, (actor_name, now_str, timetable_id, institution_id))
+
+    log_activity(
+        institution_id=institution_id,
+        actor_name=actor_name,
+        actor_role=actor_role,
+        action_type="TIMETABLE_SUBMITTED",
+        title=f"Timetable Submitted for Review",
+        description=f"{actor_name} ({actor_role.upper()}) submitted '{tt['name']}' to HOD for approval.",
+        entity_type="timetable",
+        entity_id=timetable_id
+    )
+    return True, "Timetable submitted to HOD successfully."
+
+
+def approve_timetable(timetable_id: int, institution_id: int, actor_name: str, actor_role: str) -> tuple[bool, str]:
+    """HOD or Master Admin approves the timetable."""
+    import datetime
+    from database import log_activity
+    with get_db() as conn:
+        tt = conn.execute("SELECT * FROM timetable WHERE id=? AND institution_id=?", (timetable_id, institution_id)).fetchone()
+        if not tt:
+            return False, "Timetable not found"
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        conn.execute("""
+            UPDATE timetable 
+            SET status='approved', approved_by=?, approved_at=?, rejection_note=NULL
+            WHERE id=? AND institution_id=?
+        """, (actor_name, now_str, timetable_id, institution_id))
+
+    log_activity(
+        institution_id=institution_id,
+        actor_name=actor_name,
+        actor_role=actor_role,
+        action_type="TIMETABLE_APPROVED",
+        title=f"Timetable Approved by HOD",
+        description=f"{actor_name} ({actor_role.upper()}) approved timetable '{tt['name']}'. Ready for publishing.",
+        entity_type="timetable",
+        entity_id=timetable_id
+    )
+    return True, "Timetable approved successfully."
+
+
+def reject_timetable(timetable_id: int, institution_id: int, actor_name: str, actor_role: str, reason: str = "") -> tuple[bool, str]:
+    """HOD returns timetable to Coordinator with feedback."""
+    from database import log_activity
+    with get_db() as conn:
+        tt = conn.execute("SELECT * FROM timetable WHERE id=? AND institution_id=?", (timetable_id, institution_id)).fetchone()
+        if not tt:
+            return False, "Timetable not found"
+        conn.execute("""
+            UPDATE timetable 
+            SET status='draft', rejection_note=?
+            WHERE id=? AND institution_id=?
+        """, (reason or "Changes requested by HOD", timetable_id, institution_id))
+
+    log_activity(
+        institution_id=institution_id,
+        actor_name=actor_name,
+        actor_role=actor_role,
+        action_type="TIMETABLE_REJECTED",
+        title=f"Timetable Revisions Requested",
+        description=f"HOD {actor_name} returned '{tt['name']}' with notes: {reason or 'Please revise conflicts'}",
+        entity_type="timetable",
+        entity_id=timetable_id
+    )
+    return True, "Timetable returned to Coordinator with feedback."
+
+
+def publish_timetable(timetable_id: int, institution_id: int, actor_name: str, actor_role: str) -> tuple[bool, str]:
+    """Master Admin or HOD officially publishes the approved timetable institution-wide."""
+    import datetime
+    from database import log_activity
+    with get_db() as conn:
+        tt = conn.execute("SELECT * FROM timetable WHERE id=? AND institution_id=?", (timetable_id, institution_id)).fetchone()
+        if not tt:
+            return False, "Timetable not found"
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # Deactivate any previous active timetable
+        conn.execute("UPDATE timetable SET is_active=0 WHERE institution_id=?", (institution_id,))
+        conn.execute("""
+            UPDATE timetable 
+            SET status='published', is_active=1, published_by=?, published_at=?
+            WHERE id=? AND institution_id=?
+        """, (actor_name, now_str, timetable_id, institution_id))
+
+    log_activity(
+        institution_id=institution_id,
+        actor_name=actor_name,
+        actor_role=actor_role,
+        action_type="TIMETABLE_PUBLISHED",
+        title=f"Official Timetable Published",
+        description=f"{actor_name} ({actor_role.upper()}) published '{tt['name']}'. Live across the institution.",
+        entity_type="timetable",
+        entity_id=timetable_id
+    )
+    return True, "Timetable published successfully across the institution."
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Recommendations & Analytics
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -1674,13 +1826,13 @@ def compute_analytics(institution_id: int, conn=None) -> list[dict]:
         for s in staff_list:
             s = dict(s)
             sid = s["id"]
-            avg_diff = avg_diff_map.get(sid, 0.0)
-            score = round(s["allocated_periods"] * 0.4 + s["experience"] * 0.3 + avg_diff * 0.3, 2)
+            avg_diff = float(avg_diff_map.get(sid, 0.0) or 0.0)
+            alloc_p = float(s["allocated_periods"] or 0)
+            exp = float(s["experience"] or 0)
+            max_p = float(s["max_periods_per_week"] or 0)
+            score = round(alloc_p * 0.4 + exp * 0.3 + avg_diff * 0.3, 2)
             subjs = staff_subjs.get(sid, [])
-            pct = round(
-                s["allocated_periods"] / s["max_periods_per_week"] * 100
-                if s["max_periods_per_week"] else 0, 1
-            )
+            pct = round(alloc_p / max_p * 100 if max_p else 0, 1)
             scored.append({**s, "performance_score": score, "subject_names": subjs, "overload_pct": pct})
 
         scored.sort(key=lambda x: -x["performance_score"])

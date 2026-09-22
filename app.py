@@ -11,7 +11,7 @@ from flask import (Flask, render_template, request, jsonify, redirect,
                    stream_with_context)
 from database import (get_db, init_db, seed_demo_institution, seed_realtime_model,
                       check_password, hash_password, is_legacy_hash, generate_abbreviation,
-                      close_request_db)
+                      close_request_db, log_activity, get_recent_activities)
 from scheduler import (
     generate_timetable, generate_timetable_iter,
     get_class_timetable, get_staff_timetable,
@@ -19,11 +19,15 @@ from scheduler import (
     get_working_days, get_period_count, get_period_slots,
     edit_slot, move_slot, swap_slots, check_move_valid,
     delete_timetable, get_conflict_list, get_slot_staff_options,
-    get_class_printable_data,
+    get_class_printable_data, submit_timetable, approve_timetable,
+    reject_timetable, publish_timetable,
 )
-from auth import (login_required, admin_required, creator_or_admin_required, inject_user,
+from auth import (login_required, admin_required, creator_or_admin_required,
+                  coordinator_or_above_required, hod_or_admin_required,
+                  dean_or_admin_required, inject_user,
                   get_current_user, validate_csrf_token, is_safe_url, auth_limiter,
                   validate_password_strength)
+from realtime import realtime_hub, cell_lock_manager
 from config import FLASK_SECRET_KEY, DB_BACKEND
 import syllabus_parser
 
@@ -67,11 +71,12 @@ except Exception:
     pass
 
 # Safe auto-init for serverless (Vercel) where __name__ != '__main__'
-try:
-    init_db()
-    seed_demo_institution()
-except Exception as _e:
-    print(f"[INIT] Serverless startup check: {_e}")
+if os.environ.get("VERCEL"):
+    try:
+        init_db()
+        seed_demo_institution()
+    except Exception as _e:
+        print(f"[INIT] Serverless startup check: {_e}")
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -228,6 +233,7 @@ def auth_login():
             "institution_id": inst["id"],
             "institution_name": inst["name"],
             "role": user["role"],
+            "department_id": user.get("department_id"),
         })
 
         # Interactive Onboarding Tour: Trigger every time when logging in with demo credentials
@@ -424,7 +430,14 @@ def settings_page():
         cfg   = conn.execute("SELECT * FROM time_config WHERE institution_id=?", (iid,)).fetchone()
         slots = conn.execute("SELECT * FROM period_slot WHERE institution_id=? ORDER BY slot_order", (iid,)).fetchall()
         inst  = conn.execute("SELECT * FROM institution WHERE id=?", (iid,)).fetchone()
-        users = conn.execute("SELECT id,username,email,role,created_at FROM users WHERE institution_id=?", (iid,)).fetchall()
+        users = conn.execute("""
+            SELECT u.id, u.username, u.email, u.role, u.created_at, u.department_id,
+                   d.code as dept_code, d.name as dept_name
+            FROM users u
+            LEFT JOIN department d ON d.id=u.department_id
+            WHERE u.institution_id=?
+            ORDER BY u.id
+        """, (iid,)).fetchall()
         depts = conn.execute("SELECT * FROM department WHERE institution_id=? ORDER BY category, code", (iid,)).fetchall()
     days_list     = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
     selected_days = cfg["working_days"].split(",") if cfg else ["Mon", "Tue", "Wed", "Thu", "Fri"]
@@ -607,16 +620,57 @@ def api_update_logo():
 @admin_required
 def api_add_user():
     iid = inst_id()
-    d   = request.get_json()
+    d   = request.get_json() or {}
+    username = d.get("username", "").strip()
+    password = d.get("password", "")
+    email = d.get("email", "").strip()
+    role = d.get("role", "viewer").strip().lower()
+    dept_id = d.get("department_id")
+    if dept_id:
+        try:
+            dept_id = int(dept_id)
+        except (ValueError, TypeError):
+            dept_id = None
+    else:
+        dept_id = None
+
+    if not username or not password:
+        return jsonify({"success": False, "error": "Username and password are required"})
+
+    allowed_roles = ("admin", "dean", "hod", "coordinator", "creator", "viewer")
+    if role not in allowed_roles:
+        role = "viewer"
+
     with get_db() as conn:
-        if conn.execute("SELECT 1 FROM users WHERE institution_id=? AND username=?", (iid, d["username"])).fetchone():
+        if conn.execute("SELECT 1 FROM users WHERE institution_id=? AND username=?", (iid, username)).fetchone():
             return jsonify({"success": False, "error": "Username already exists"})
-        role = d.get("role", "viewer")
-        if role not in ("admin", "creator", "viewer"):
-            role = "viewer"
+
+        # Enforce exactly at most 2 coordinators per department rule
+        if role in ("coordinator", "creator") and dept_id:
+            coord_count = conn.execute("""
+                SELECT COUNT(*) as cnt FROM users 
+                WHERE institution_id=? AND department_id=? AND role IN ('coordinator', 'creator')
+            """, (iid, dept_id)).fetchone()["cnt"]
+            if coord_count >= 2:
+                dept_row = conn.execute("SELECT code, name FROM department WHERE id=?", (dept_id,)).fetchone()
+                dept_name = dept_row["name"] if dept_row else "this department"
+                return jsonify({
+                    "success": False, 
+                    "error": f"Department '{dept_name}' already has the maximum of 2 Timetable Coordinators assigned."
+                })
+
         conn.insert(
-            "INSERT INTO users (institution_id,username,email,password_hash,role) VALUES (?,?,?,?,?)",
-            (iid, d["username"], d.get("email", ""), hash_password(d["password"]), role)
+            "INSERT INTO users (institution_id, username, email, password_hash, role, department_id) VALUES (?,?,?,?,?,?)",
+            (iid, username, email, hash_password(password), role, dept_id)
+        )
+        log_activity(
+            institution_id=iid,
+            actor_name=session.get("username", "Admin"),
+            actor_role=session.get("role", "admin"),
+            action_type="USER_CREATED",
+            title=f"User '{username}' Created",
+            description=f"Assigned role: {role.upper()}" + (f" for department ID {dept_id}" if dept_id else ""),
+            department_id=dept_id
         )
     return jsonify({"success": True})
 
@@ -1358,6 +1412,19 @@ def api_generate():
     if warnings and not d.get("force"):
         return jsonify({"success": False, "warnings": warnings})
     tt_id, conflicts = generate_timetable(iid, d.get("name", "Auto Generated"))
+    uname = session.get("username", "Coordinator")
+    role = session.get("role", "coordinator")
+    log_activity(
+        institution_id=iid,
+        actor_name=uname,
+        actor_role=role,
+        action_type="TIMETABLE_GENERATED",
+        title="Timetable Generated",
+        description=f"{uname} ({role.upper()}) generated draft timetable with {len(conflicts)} conflict(s)",
+        entity_type="timetable",
+        entity_id=tt_id
+    )
+    realtime_hub.publish(iid, "timetable_generated", {"timetable_id": tt_id, "conflicts": len(conflicts)})
     return jsonify({"success": True, "timetable_id": tt_id,
                     "conflicts": conflicts, "conflict_count": len(conflicts)})
 
@@ -1394,7 +1461,19 @@ def api_generate_stream():
 @app.route("/api/timetable/delete", methods=["DELETE"])
 @creator_or_admin_required
 def api_delete_tt():
-    delete_timetable(inst_id())
+    iid = inst_id()
+    delete_timetable(iid)
+    uname = session.get("username", "Coordinator")
+    role = session.get("role", "coordinator")
+    log_activity(
+        institution_id=iid,
+        actor_name=uname,
+        actor_role=role,
+        action_type="TIMETABLE_DELETED",
+        title="Timetable Reset",
+        description=f"{uname} ({role.upper()}) reset the active timetable slots"
+    )
+    realtime_hub.publish(iid, "timetable_deleted", {})
     return jsonify({"success": True})
 
 
@@ -1410,10 +1489,21 @@ def api_class_tt(class_id):
     iid = inst_id()
     tt_id, grid = get_class_timetable(class_id, iid)
     slots = get_period_slots(iid)
+    tt_meta = {}
+    if tt_id:
+        with get_db() as conn:
+            row = conn.execute("""
+                SELECT status, name, submitted_by, submitted_at, approved_by, approved_at,
+                       published_by, published_at, rejection_note
+                FROM timetable WHERE id=? AND institution_id=?
+            """, (tt_id, iid)).fetchone()
+            if row:
+                tt_meta = dict(row)
     return jsonify({
         "timetable_id": tt_id, "grid": grid,
         "days": get_working_days(iid), "periods": get_period_count(iid),
         "period_slots": slots,
+        "meta": tt_meta,
     })
 
 
@@ -1434,8 +1524,30 @@ def api_staff_tt(staff_id):
 @creator_or_admin_required
 def api_edit_slot(slot_id):
     """Change the staff member for a slot."""
-    d = request.get_json()
-    ok, msg = edit_slot(slot_id, d["staff_id"], inst_id())
+    iid = inst_id()
+    d = request.get_json() or {}
+    staff_id = d.get("staff_id")
+    ok, msg = edit_slot(slot_id, staff_id, iid)
+    if ok:
+        uname = session.get("username", "Coordinator")
+        role = session.get("role", "coordinator")
+        cell_lock_manager.release(iid, slot_id, session.get("user_id", 0))
+        realtime_hub.publish(iid, "slot_updated", {
+            "slot_id": slot_id,
+            "action": "edit",
+            "staff_id": staff_id,
+            "user": uname
+        })
+        log_activity(
+            institution_id=iid,
+            actor_name=uname,
+            actor_role=role,
+            action_type="SLOT_EDITED",
+            title="Slot Faculty Reassigned",
+            description=f"{uname} ({role.upper()}) reassigned faculty on slot #{slot_id}",
+            entity_type="slot",
+            entity_id=slot_id
+        )
     return jsonify({"success": ok, "message": msg})
 
 
@@ -1443,8 +1555,32 @@ def api_edit_slot(slot_id):
 @creator_or_admin_required
 def api_move_slot(slot_id):
     """Move slot to a different day and period."""
-    d = request.get_json()
-    ok, msg = move_slot(slot_id, d["day"], int(d["period"]), inst_id())
+    iid = inst_id()
+    d = request.get_json() or {}
+    day = d.get("day", "")
+    period = int(d.get("period", 0))
+    ok, msg = move_slot(slot_id, day, period, iid)
+    if ok:
+        uname = session.get("username", "Coordinator")
+        role = session.get("role", "coordinator")
+        cell_lock_manager.release(iid, slot_id, session.get("user_id", 0))
+        realtime_hub.publish(iid, "slot_updated", {
+            "slot_id": slot_id,
+            "action": "move",
+            "day": day,
+            "period": period,
+            "user": uname
+        })
+        log_activity(
+            institution_id=iid,
+            actor_name=uname,
+            actor_role=role,
+            action_type="SLOT_MOVED",
+            title="Slot Relocated",
+            description=f"{uname} moved slot #{slot_id} to {day} Period {period}",
+            entity_type="slot",
+            entity_id=slot_id
+        )
     return jsonify({"success": ok, "message": msg})
 
 
@@ -1452,8 +1588,31 @@ def api_move_slot(slot_id):
 @creator_or_admin_required
 def api_swap_slot(slot_id):
     """Swap two slots' day/period positions."""
-    d = request.get_json()
-    ok, msg = swap_slots(slot_id, int(d["target_slot_id"]), inst_id())
+    iid = inst_id()
+    d = request.get_json() or {}
+    target_slot_id = int(d.get("target_slot_id", 0))
+    ok, msg = swap_slots(slot_id, target_slot_id, iid)
+    if ok:
+        uname = session.get("username", "Coordinator")
+        role = session.get("role", "coordinator")
+        cell_lock_manager.release(iid, slot_id, session.get("user_id", 0))
+        cell_lock_manager.release(iid, target_slot_id, session.get("user_id", 0))
+        realtime_hub.publish(iid, "slot_updated", {
+            "slot_id": slot_id,
+            "target_slot_id": target_slot_id,
+            "action": "swap",
+            "user": uname
+        })
+        log_activity(
+            institution_id=iid,
+            actor_name=uname,
+            actor_role=role,
+            action_type="SLOTS_SWAPPED",
+            title="Slots Swapped",
+            description=f"{uname} swapped slots #{slot_id} and #{target_slot_id}",
+            entity_type="slot",
+            entity_id=slot_id
+        )
     return jsonify({"success": ok, "message": msg})
 
 
@@ -1471,6 +1630,180 @@ def api_check_move(slot_id):
 @login_required
 def api_slot_staff_options(slot_id):
     return jsonify(get_slot_staff_options(slot_id, inst_id()))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# REAL-TIME SSE & LIVE COLLABORATION ENDPOINTS
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/realtime/stream")
+@login_required
+def api_realtime_stream():
+    """
+    Persistent SSE connection for instant grid synchronization, cell lock presence,
+    and institutional live activity notifications.
+    """
+    iid = inst_id()
+    q = realtime_hub.subscribe(iid)
+
+    def event_generator():
+        # Initial greeting event
+        yield realtime_hub.format_sse("connected", {"status": "connected", "institution_id": iid})
+        try:
+            while True:
+                try:
+                    # Wait up to 15 seconds for a message
+                    msg = q.get(timeout=15.0)
+                    yield realtime_hub.format_sse(msg["event"], msg["data"])
+                except Exception:
+                    # Timeout reached -> emit lightweight heartbeat ping
+                    yield ": ping\n\n"
+        except GeneratorExit:
+            pass
+        finally:
+            realtime_hub.unsubscribe(iid, q)
+
+    return Response(
+        stream_with_context(event_generator()),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive"
+        }
+    )
+
+
+@app.route("/api/timetable/locks", methods=["GET"])
+@login_required
+def api_get_cell_locks():
+    """Retrieve all current cell presence locks for the institution."""
+    return jsonify(cell_lock_manager.get_active_locks(inst_id()))
+
+
+@app.route("/api/timetable/slot/<int:slot_id>/lock", methods=["POST"])
+@creator_or_admin_required
+def api_acquire_cell_lock(slot_id):
+    """Acquire a temporary 60-second edit lock on a timetable slot."""
+    iid = inst_id()
+    uid = session.get("user_id")
+    uname = session.get("username", "User")
+    role = session.get("role", "coordinator")
+    success, lock_info = cell_lock_manager.acquire(iid, slot_id, uid, uname, role)
+    if success:
+        realtime_hub.publish(iid, "slot_locked", lock_info)
+        return jsonify({"success": True, "lock": lock_info})
+    return jsonify({
+        "success": False,
+        "error": f"Slot is currently being edited by {lock_info.get('username')} ({lock_info.get('role')}).",
+        "lock": lock_info
+    }), 409
+
+
+@app.route("/api/timetable/slot/<int:slot_id>/unlock", methods=["POST"])
+@creator_or_admin_required
+def api_release_cell_lock(slot_id):
+    """Release an edit lock held by the current user."""
+    iid = inst_id()
+    uid = session.get("user_id")
+    released = cell_lock_manager.release(iid, slot_id, uid)
+    if released:
+        realtime_hub.publish(iid, "slot_unlocked", {"slot_id": slot_id})
+    return jsonify({"success": released})
+
+
+@app.route("/api/timetable/slot/<int:slot_id>/override-lock", methods=["POST"])
+@admin_required
+def api_override_cell_lock(slot_id):
+    """Master Admin emergency lock override."""
+    iid = inst_id()
+    uid = session.get("user_id")
+    uname = session.get("username", "Admin")
+    success, old_lock = cell_lock_manager.override(iid, slot_id, uid, uname)
+    lock_info = {"slot_id": slot_id, "user_id": uid, "username": uname, "role": "admin"}
+    realtime_hub.publish(iid, "slot_locked", lock_info)
+    log_activity(
+        institution_id=iid,
+        actor_name=uname,
+        actor_role="admin",
+        action_type="LOCK_OVERRIDDEN",
+        title="Admin Lock Override",
+        description=f"Master Admin overridden edit lock on slot #{slot_id}" + (f" previously held by {old_lock.get('username')}" if old_lock else ""),
+        entity_type="slot",
+        entity_id=slot_id
+    )
+    return jsonify({"success": True, "lock": lock_info})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TIMETABLE APPROVAL & PUBLISHING WORKFLOW
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/timetable/<int:timetable_id>/submit", methods=["POST"])
+@creator_or_admin_required
+def api_submit_timetable(timetable_id):
+    iid = inst_id()
+    uname = session.get("username", "Coordinator")
+    role = session.get("role", "coordinator")
+    ok, msg = submit_timetable(timetable_id, iid, uname, role)
+    if ok:
+        realtime_hub.publish(iid, "timetable_status_changed", {"timetable_id": timetable_id, "status": "submitted", "actor": uname})
+    return jsonify({"success": ok, "message": msg})
+
+
+@app.route("/api/timetable/<int:timetable_id>/approve", methods=["POST"])
+@hod_or_admin_required
+def api_approve_timetable(timetable_id):
+    iid = inst_id()
+    uname = session.get("username", "HOD")
+    role = session.get("role", "hod")
+    ok, msg = approve_timetable(timetable_id, iid, uname, role)
+    if ok:
+        realtime_hub.publish(iid, "timetable_status_changed", {"timetable_id": timetable_id, "status": "approved", "actor": uname})
+    return jsonify({"success": ok, "message": msg})
+
+
+@app.route("/api/timetable/<int:timetable_id>/reject", methods=["POST"])
+@hod_or_admin_required
+def api_reject_timetable(timetable_id):
+    iid = inst_id()
+    uname = session.get("username", "HOD")
+    role = session.get("role", "hod")
+    data = request.get_json() or {}
+    reason = data.get("reason", "")
+    ok, msg = reject_timetable(timetable_id, iid, uname, role, reason)
+    if ok:
+        realtime_hub.publish(iid, "timetable_status_changed", {"timetable_id": timetable_id, "status": "draft", "actor": uname, "reason": reason})
+    return jsonify({"success": ok, "message": msg})
+
+
+@app.route("/api/timetable/<int:timetable_id>/publish", methods=["POST"])
+@hod_or_admin_required
+def api_publish_timetable(timetable_id):
+    iid = inst_id()
+    uname = session.get("username", "Admin")
+    role = session.get("role", "admin")
+    ok, msg = publish_timetable(timetable_id, iid, uname, role)
+    if ok:
+        realtime_hub.publish(iid, "timetable_status_changed", {"timetable_id": timetable_id, "status": "published", "actor": uname})
+    return jsonify({"success": ok, "message": msg})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# LIVE ACTIVITY FEED ENDPOINT
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/activity/feed", methods=["GET"])
+@login_required
+def api_activity_feed():
+    iid = inst_id()
+    role = session.get("role")
+    dept_id = session.get("department_id")
+    # Master Admin and Dean monitor institution-wide; HOD & Coordinators see department
+    if role in ("admin", "dean"):
+        dept_id = None
+    activities = get_recent_activities(iid, department_id=dept_id, limit=35)
+    return jsonify(activities)
 
 
 # ── Export ──────────────────────────────────────────────────────────────────

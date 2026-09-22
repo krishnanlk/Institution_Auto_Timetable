@@ -357,13 +357,14 @@
 
 {% if current_user.role == 'admin' %}
 <!-- USERS -->
+<!-- USERS -->
 <div class="stab-panel" id="tab-users" style="display:none">
   <div class="card-panel">
     <div class="panel-head"><h3><i class="fas fa-users-cog me-2 text-indigo"></i>User Management</h3><button class="btn-primary-sm" onclick="openAddUser()"><i class="fas fa-plus me-1"></i>Add User</button></div>
     <div class="panel-body p-4">
       <div class="table-responsive">
         <table class="data-table">
-          <thead><tr><th>Username</th><th>Email</th><th>Role</th><th>Created</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Username</th><th>Email</th><th>Role</th><th>Department</th><th>Created</th><th>Actions</th></tr></thead>
           <tbody>
           {% for u in users %}
           <tr>
@@ -371,11 +372,22 @@
             <td>{{ u.email or '—' }}</td>
             <td>
               {% if u.role == 'admin' %}
-                <span class="badge bg-primary"><i class="fas fa-shield-alt me-1"></i>admin</span>
-              {% elif u.role == 'creator' %}
-                <span class="badge" style="background:#8b5cf6;color:#fff;"><i class="fas fa-magic me-1"></i>creator</span>
+                <span class="badge" style="background:#4338ca;color:#fff;"><i class="fas fa-shield-alt me-1"></i>Master Admin</span>
+              {% elif u.role == 'dean' %}
+                <span class="badge" style="background:#0284c7;color:#fff;"><i class="fas fa-graduation-cap me-1"></i>Dean</span>
+              {% elif u.role == 'hod' %}
+                <span class="badge" style="background:#7e22ce;color:#fff;"><i class="fas fa-user-tie me-1"></i>HOD</span>
+              {% elif u.role in ('coordinator', 'creator') %}
+                <span class="badge" style="background:#d97706;color:#fff;"><i class="fas fa-magic me-1"></i>Coordinator</span>
               {% else %}
-                <span class="badge bg-secondary"><i class="fas fa-eye me-1"></i>viewer</span>
+                <span class="badge bg-secondary"><i class="fas fa-eye me-1"></i>Faculty / Staff</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if u.dept_code %}
+                <span class="badge bg-light text-dark border">{{ u.dept_code }}</span> <small class="text-muted">({{ u.dept_name }})</small>
+              {% else %}
+                <span class="text-muted">—</span>
               {% endif %}
             </td>
             <td>{{ u.created_at[:10] }}</td>
@@ -392,23 +404,35 @@
 <!-- Add User Modal -->
 <div class="modal fade" id="addUserModal" tabindex="-1">
   <div class="modal-dialog"><div class="modal-content cm">
-    <div class="cm-head"><h5>Add User</h5><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+    <div class="cm-head"><h5><i class="fas fa-user-plus me-2 text-indigo"></i>Add Institutional User</h5><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
     <div class="modal-body">
       <div class="row g-3">
-        <div class="col-md-6"><label class="form-label fw-600">Username *</label><input type="text" class="ctrl" id="newUsername"/></div>
+        <div class="col-md-6"><label class="form-label fw-600">Username *</label><input type="text" class="ctrl" id="newUsername" placeholder="e.g. coordinator_cse"/></div>
         <div class="col-md-6">
-          <label class="form-label fw-600">Role</label>
-          <select class="ctrl" id="newRole">
-            <option value="admin">Admin (Full Access & User Management)</option>
-            <option value="creator">Creator (Timetable & Staff Access - View Only Institution)</option>
-            <option value="viewer">Viewer (Read Only)</option>
+          <label class="form-label fw-600">Institutional Role *</label>
+          <select class="ctrl" id="newRole" onchange="onRoleChange(this.value)">
+            <option value="admin">Master Admin (Full Institutional Control & Override)</option>
+            <option value="dean">Dean (Institution-wide Overview & Academic Monitoring)</option>
+            <option value="hod">HOD (Department Head — Reviews & Approvals)</option>
+            <option value="coordinator" selected>Timetable Coordinator (Department Schedule Builder — Max 2)</option>
+            <option value="viewer">Faculty / Staff (View Assigned Timetables)</option>
           </select>
         </div>
-        <div class="col-md-6"><label class="form-label fw-600">Email</label><input type="email" class="ctrl" id="newUserEmail"/></div>
-        <div class="col-md-6"><label class="form-label fw-600">Password *</label><input type="password" class="ctrl" id="newUserPw" minlength="6"/></div>
+        <div class="col-12" id="userDeptWrap">
+          <label class="form-label fw-600">Assigned Department (for HOD / Coordinator)</label>
+          <select class="ctrl" id="newUserDept">
+            <option value="">— Select Department —</option>
+            {% for d in departments %}
+            <option value="{{ d.id }}">{{ d.code }} — {{ d.name }} ({{ d.category|upper }})</option>
+            {% endfor %}
+          </select>
+          <small class="text-muted" style="font-size:11px;">* Note: A department can have at most 2 Timetable Coordinators assigned.</small>
+        </div>
+        <div class="col-md-6"><label class="form-label fw-600">Email</label><input type="email" class="ctrl" id="newUserEmail" placeholder="user@college.edu"/></div>
+        <div class="col-md-6"><label class="form-label fw-600">Password *</label><input type="password" class="ctrl" id="newUserPw" minlength="6" placeholder="Min 6 characters"/></div>
       </div>
     </div>
-    <div class="cm-foot"><button class="btn-cancel" data-bs-dismiss="modal">Cancel</button><button class="btn-save" onclick="saveUser()">Add User</button></div>
+    <div class="cm-foot"><button class="btn-cancel" data-bs-dismiss="modal">Cancel</button><button class="btn-save" onclick="saveUser()"><i class="fas fa-check me-1"></i>Create User</button></div>
   </div></div>
 </div>
 {% endif %}
@@ -563,16 +587,47 @@ async function saveInstitution(){
   }
 }
 
-function openAddUser(){ if (addUserModal) addUserModal.show(); }
+function onRoleChange(role) {
+  const wrap = document.getElementById('userDeptWrap');
+  if (wrap) {
+    wrap.style.display = (role === 'hod' || role === 'coordinator' || role === 'creator') ? 'block' : 'none';
+  }
+}
+
+function openAddUser(){ 
+  if (addUserModal) {
+    onRoleChange(document.getElementById('newRole')?.value || 'coordinator');
+    addUserModal.show(); 
+  }
+}
 
 async function saveUser(){
-  const data={username:document.getElementById('newUsername').value,email:document.getElementById('newUserEmail').value,
-    password:document.getElementById('newUserPw').value,role:document.getElementById('newRole').value};
-  if(!data.username||!data.password){ showToast('Username and password required','warning'); return; }
-  const r=await fetch('/api/settings/add_user',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-  const d=await r.json();
-  if(d.success){ addUserModal.hide(); location.reload(); }
-  else showToast(d.error||'Error adding user','danger');
+  const role = document.getElementById('newRole').value;
+  const deptVal = document.getElementById('newUserDept')?.value;
+  const data = {
+    username: document.getElementById('newUsername').value.trim(),
+    email: document.getElementById('newUserEmail').value.trim(),
+    password: document.getElementById('newUserPw').value,
+    role: role,
+    department_id: (role === 'hod' || role === 'coordinator' || role === 'creator') && deptVal ? parseInt(deptVal) : null
+  };
+  if(!data.username || !data.password){ 
+    showToast('Username and password required', 'warning'); 
+    return; 
+  }
+  const r = await fetch('/api/settings/add_user', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(data)
+  });
+  const d = await r.json();
+  if (d.success) { 
+    if (addUserModal) addUserModal.hide(); 
+    showToast('User created successfully!');
+    setTimeout(() => location.reload(), 600);
+  } else {
+    showToast(d.error || 'Error adding user', 'danger');
+  }
 }
 
 async function deleteUser(id,name){

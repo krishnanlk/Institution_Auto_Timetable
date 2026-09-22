@@ -1,6 +1,7 @@
 import secrets
 import hmac
 import time
+from typing import Optional
 from urllib.parse import urlparse, urljoin
 from collections import defaultdict
 from functools import wraps
@@ -102,6 +103,68 @@ def validate_password_strength(password: str) -> tuple[bool, str]:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Institutional Role & Scope Checkers (Master Admin, Dean, HOD, Coordinator, Staff)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def is_master_admin(user: Optional[dict]) -> bool:
+    return bool(user and user.get("role") == "admin")
+
+def is_dean(user: Optional[dict]) -> bool:
+    return bool(user and user.get("role") == "dean")
+
+def is_hod(user: Optional[dict], department_id: Optional[int] = None) -> bool:
+    if not user or user.get("role") != "hod":
+        return False
+    if department_id is not None and user.get("department_id") is not None:
+        return user.get("department_id") == department_id
+    return True
+
+def is_coordinator(user: Optional[dict], department_id: Optional[int] = None) -> bool:
+    if not user or user.get("role") not in ("coordinator", "creator"):
+        return False
+    if department_id is not None and user.get("department_id") is not None:
+        return user.get("department_id") == department_id
+    return True
+
+def can_view_department(user: Optional[dict], department_id: Optional[int]) -> bool:
+    """Master Admin and Deans have institution-wide view; HODs/Coordinators/Staff can view their own department."""
+    if not user:
+        return False
+    role = user.get("role")
+    if role in ("admin", "dean"):
+        return True
+    if department_id is None or user.get("department_id") is None:
+        return True
+    return user.get("department_id") == department_id
+
+def can_edit_department_resource(user: Optional[dict], department_id: Optional[int]) -> bool:
+    """Master Admin can edit anything. HOD and Coordinator can only edit their own department resources."""
+    if not user:
+        return False
+    role = user.get("role")
+    if role == "admin":
+        return True
+    if role in ("hod", "coordinator", "creator"):
+        if department_id is None or user.get("department_id") is None:
+            return True
+        return user.get("department_id") == department_id
+    return False
+
+def can_approve_department_timetable(user: Optional[dict], department_id: Optional[int]) -> bool:
+    """Master Admin can override/approve anything. HOD can approve their own department's timetable."""
+    if not user:
+        return False
+    role = user.get("role")
+    if role == "admin":
+        return True
+    if role == "hod":
+        if department_id is None or user.get("department_id") is None:
+            return True
+        return user.get("department_id") == department_id
+    return False
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Access Control Decorators
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -117,25 +180,67 @@ def login_required(f):
     return decorated
 
 
-def creator_or_admin_required(f):
-    """Allows admin and creator to modify academic and scheduling data (staff, subjects, classes, rooms, timetables, time config, slots). Blocks viewers."""
+def coordinator_or_above_required(f):
+    """Allows Master Admin, HOD, and Timetable Coordinators. Blocks Deans (view-only) and Staff."""
     @wraps(f)
     def decorated(*args, **kwargs):
         if "user_id" not in session:
             if request.path.startswith("/api/"):
                 return jsonify({"error": "Not authenticated"}), 401
             return redirect(url_for("auth_login"))
-        if session.get("role") not in ("admin", "creator"):
+        role = session.get("role")
+        if role not in ("admin", "hod", "coordinator", "creator"):
             if request.path.startswith("/api/"):
-                return jsonify({"success": False, "error": "Permission denied. Viewer accounts cannot modify data."}), 403
-            flash("You have viewer access only. Contact your administrator to make changes.", "warning")
+                return jsonify({"success": False, "error": "Permission denied. Modifying schedule requires Coordinator, HOD, or Master Admin access."}), 403
+            flash("Modifying schedule requires Coordinator, HOD, or Master Admin access.", "warning")
+            return redirect(request.referrer or url_for("dashboard"))
+        return f(*args, **kwargs)
+    return decorated
+
+
+def creator_or_admin_required(f):
+    """Alias to coordinator_or_above_required for full backward compatibility."""
+    return coordinator_or_above_required(f)
+
+
+def hod_or_admin_required(f):
+    """Allows Master Admin and HOD for department authority and timetable review/approvals."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if "user_id" not in session:
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "Not authenticated"}), 401
+            return redirect(url_for("auth_login"))
+        role = session.get("role")
+        if role not in ("admin", "hod"):
+            if request.path.startswith("/api/"):
+                return jsonify({"success": False, "error": "Approval authority restricted to HOD and Master Admin."}), 403
+            flash("Approval authority restricted to HOD and Master Admin.", "warning")
+            return redirect(request.referrer or url_for("dashboard"))
+        return f(*args, **kwargs)
+    return decorated
+
+
+def dean_or_admin_required(f):
+    """Allows Master Admin and Dean (institution-wide overview and monitoring)."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if "user_id" not in session:
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "Not authenticated"}), 401
+            return redirect(url_for("auth_login"))
+        role = session.get("role")
+        if role not in ("admin", "dean"):
+            if request.path.startswith("/api/"):
+                return jsonify({"success": False, "error": "Access restricted to Dean and Master Admin."}), 403
+            flash("Access restricted to Dean and Master Admin.", "warning")
             return redirect(request.referrer or url_for("dashboard"))
         return f(*args, **kwargs)
     return decorated
 
 
 def admin_required(f):
-    """Strictly requires master admin role (for institution profile, college logo, and user management)."""
+    """Strictly requires Master Admin role (for institution profile, college logo, department setup, coordinator assignment)."""
     @wraps(f)
     def decorated(*args, **kwargs):
         if "user_id" not in session:
@@ -144,8 +249,8 @@ def admin_required(f):
             return redirect(url_for("auth_login"))
         if session.get("role") != "admin":
             if request.path.startswith("/api/"):
-                return jsonify({"success": False, "error": "Permission denied. Only Master Admin can manage institution profile, logo, and users."}), 403
-            flash("Permission denied. Only Master Admin can manage institution profile, logo, and users.", "warning")
+                return jsonify({"success": False, "error": "Permission denied. Only Master Admin can manage institution settings, departments, and user roles."}), 403
+            flash("Permission denied. Only Master Admin can manage institution settings, departments, and user roles.", "warning")
             return redirect(request.referrer or url_for("dashboard"))
         return f(*args, **kwargs)
     return decorated
@@ -162,12 +267,15 @@ def get_current_user():
         pass
 
     with get_db() as conn:
-        u = conn.execute(
-            "SELECT u.*, i.name as inst_name, i.code as inst_code, i.logo_text, i.logo_url, "
-            "i.email as inst_email, i.phone as inst_phone, i.address as inst_address "
-            "FROM users u JOIN institution i ON i.id=u.institution_id WHERE u.id=?",
-            (session["user_id"],)
-        ).fetchone()
+        u = conn.execute("""
+            SELECT u.*, d.name as dept_name, d.code as dept_code, d.category as dept_category,
+                   i.name as inst_name, i.code as inst_code, i.logo_text, i.logo_url,
+                   i.email as inst_email, i.phone as inst_phone, i.address as inst_address
+            FROM users u
+            JOIN institution i ON i.id=u.institution_id
+            LEFT JOIN department d ON d.id=u.department_id
+            WHERE u.id=?
+        """, (session["user_id"],)).fetchone()
         user_dict = dict(u) if u else None
 
     try:
